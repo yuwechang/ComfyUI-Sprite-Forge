@@ -8,6 +8,20 @@
 
 이 프로젝트는 **0x0funky**가 만든 [Agent Sprite Forge](https://github.com/0x0funky/agent-sprite-forge)의 **비공식 수정판**입니다. 원본의 [MIT 라이선스](LICENSE)를 유지합니다. 독립된 스킬 이름을 사용하므로 원본과 함께 설치할 수 있습니다.
 
+## 예제 보기
+
+포함된 [sample-character.png](examples/sample-character.png)로 테스트하거나 자신의 캐릭터 이미지를 사용할 수 있습니다.
+
+| 원본 캐릭터 이미지 | 달리기 GIF 미리보기 |
+|---|---|
+| <img src="examples/sample-character.png" alt="초록색 배경의 원본 캐릭터" width="220"> | <img src="examples/sample-character-run-preview.gif" alt="투명 배경 달리기 루프" width="128"> |
+
+예제 결과는 **128×128, 8프레임, 8 fps, 1초 루프**입니다. 투명 PNG 스프라이트 시트:
+
+![8프레임 투명 달리기 스프라이트 시트](examples/sample-character-run-spritesheet.png)
+
+테스트하려면 Codex에 “이 프로젝트의 examples/sample-character.png로 위 설정에 맞는 달리기 루프를 만들어 주세요”라고 요청하세요. 소재 안내는 [examples/README.md](examples/README.md)를 참고하세요.
+
 ## 먼저 준비할 것
 
 1. **Codex**: 로컬 파일을 읽고 도구를 실행할 수 있어야 합니다.
@@ -51,4 +65,6 @@ Codex는 프로젝트 안내에 따라 필요한 노드를 확인합니다. 워�
 
 이 상세 문서는 현재 중국어 번체로 작성되어 있습니다. Codex에 한국어 설명을 요청할 수 있습니다.
 
-원본 이미지는 직접 준비해야 합니다. 정지 이미지 생성은 설정되어 있지 않습니다. 모델과 서드파티 노드의 출처 및 라이선스는 직접 확인해 주세요.
+포함된 테스트 이미지 또는 자신의 캐릭터 이미지를 사용하세요. 정지 이미지 생성은 설정되어 있지 않습니다. 모델과 서드파티 노드의 출처 및 라이선스는 직접 확인해 주세요.
+
+이 프로젝트의 소스 코드, 수정 사항, examples/ 폴더의 이미지와 애니메이션은 모두 [MIT 라이선스](LICENSE)를 따릅니다。

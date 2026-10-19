@@ -12,4 +12,4 @@
 
 朋友需要的是**整個來源repo**，不是只下載一個SKILL.md。他們也需要自己的本機ComfyUI、能正常跑的H3 workflow、Python依賴和ffmpeg。Codex依INSTALL.md安裝五個技能後，會以他們自己的config與workflow路徑建立manifest，不會複製你的個人安裝路徑。
 
-本專案不含第三方模型、執行環境或示範角色素材。分享workflow範例時，模型名稱仍只表示本機設定，不宣稱官方來源或授權。
+本專案不含第三方模型或執行環境；examples/ 包含維護者以MIT授權提供的角色測試素材，說明見 examples/README.md。分享workflow範例時，模型名稱仍只表示本機設定，不宣稱官方來源或授權。

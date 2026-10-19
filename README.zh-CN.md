@@ -8,6 +8,20 @@
 
 这是基于 [Agent Sprite Forge](https://github.com/0x0funky/agent-sprite-forge) 的**非官方修改版**。原作者为 **0x0funky**，保留原项目的 [MIT 许可证](LICENSE)。本版使用独立名称，可以和原版一起安装。
 
+## 看看示例
+
+可以直接用 [sample-character.png](examples/sample-character.png) 测试，也可以换成自己的角色图片。
+
+| 原始角色图 | 跑步 GIF 预览 |
+|---|---|
+| <img src="examples/sample-character.png" alt="绿底角色原图" width="220"> | <img src="examples/sample-character-run-preview.gif" alt="透明跑步循环" width="128"> |
+
+成品为 **128×128、8 帧、8 fps，循环 1 秒**。透明 PNG 图集：
+
+![8帧透明跑步图集](examples/sample-character-run-spritesheet.png)
+
+想试跑时，对 Codex 说：“使用项目 examples/sample-character.png，制作上述规格的跑步循环。”素材说明见 [examples/README.md](examples/README.md)。
+
 ## 先准备这两样
 
 1. **Codex**：可以读取你电脑上的文件、执行工具。
@@ -51,4 +65,6 @@ Codex 会按项目说明找出需要连接的节点。不同工作流可能需�
 
 这些详细文档目前以繁体中文编写，可以请 Codex 用你熟悉的语言解释。
 
-本版目前需要你提供原始图片，尚未配置静态图片生成。模型与第三方节点的来源、许可证请自行确认。
+你可以使用附带的测试图片，或提供自己的角色图；本版尚未配置静态图片生成。模型与第三方节点的来源、许可证请自行确认。
+
+本项目的源代码、修改内容及 examples/ 中的图片和动画均采用 [MIT 许可证](LICENSE)。

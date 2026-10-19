@@ -8,6 +8,20 @@ For example, give Codex a character image and ask for a running animation, a tra
 
 This is an **unofficial fork** of [Agent Sprite Forge](https://github.com/0x0funky/agent-sprite-forge), originally created by **0x0funky**. The original [MIT license](LICENSE) is preserved. This fork uses separate skill names and can be installed alongside the original.
 
+## See an example
+
+Try the included [sample-character.png](examples/sample-character.png), or use your own character image.
+
+| Source character | Running GIF preview |
+|---|---|
+| <img src="examples/sample-character.png" alt="Source character on a green background" width="220"> | <img src="examples/sample-character-run-preview.gif" alt="Transparent running loop" width="128"> |
+
+The result is **128×128, 8 frames at 8 fps, looping for 1 second**. Transparent PNG sprite sheet:
+
+![Eight-frame transparent running sprite sheet](examples/sample-character-run-spritesheet.png)
+
+To try it, tell Codex: “Use examples/sample-character.png from this project to create a run cycle with the settings above.” See [examples/README.md](examples/README.md) for asset notes.
+
 ## What you need first
 
 1. **Codex**, with access to local files and tools.
@@ -51,4 +65,6 @@ The character is scaled proportionally into a transparent canvas; the entire vid
 
 These detailed guides are currently written in Traditional Chinese; you can ask Codex to explain them in your language.
 
-You must provide the source image. Still-image generation is not configured. Check the sources and licenses of your models and third-party nodes yourself.
+Use the included test image or provide your own character image. Still-image generation is not configured. Check the sources and licenses of your models and third-party nodes yourself.
+
+The source code, modifications, and images and animations in examples/ are all licensed under the [MIT License](LICENSE).

@@ -8,6 +8,20 @@
 
 本プロジェクトは、**0x0funky** 氏による [Agent Sprite Forge](https://github.com/0x0funky/agent-sprite-forge) の**非公式フォーク**です。元の [MIT ライセンス](LICENSE) を保持しています。独自のスキル名を使うため、元の版と同時にインストールできます。
 
+## サンプルを見る
+
+付属の [sample-character.png](examples/sample-character.png) で試すことも、自分のキャラクター画像を使うこともできます。
+
+| 元のキャラクター画像 | 走る動きの GIF プレビュー |
+|---|---|
+| <img src="examples/sample-character.png" alt="緑背景の元画像" width="220"> | <img src="examples/sample-character-run-preview.gif" alt="背景透過の走行ループ" width="128"> |
+
+完成例は **128×128、8 フレーム、8 fps、1 秒のループ**です。透過 PNG スプライトシート：
+
+![8フレームの透過スプライトシート](examples/sample-character-run-spritesheet.png)
+
+試すときは Codex に「このプロジェクトの examples/sample-character.png を使い、上記の設定で走るループを作ってください」と伝えてください。素材については [examples/README.md](examples/README.md) をご覧ください。
+
 ## 最初に必要なもの
 
 1. **Codex**：ローカルファイルを読み、ツールを実行できること。
@@ -51,4 +65,6 @@ Codex はプロジェクトの説明を読み、必要なノードを確認し�
 
 これらの詳細資料は現在、繁体字中国語で書かれています。Codex に日本語での説明を依頼できます。
 
-元の画像は自分で用意してください。静止画像の生成は未設定です。モデルやサードパーティ製ノードの出所とライセンスは、各自で確認してください。
+付属のテスト画像、または自分のキャラクター画像を使ってください。静止画像の生成は未設定です。モデルやサードパーティ製ノードの出所とライセンスは、各自で確認してください。
+
+本プロジェクトのソースコード、変更部分、および examples/ 内の画像とアニメーションは、すべて [MIT ライセンス](LICENSE) で提供します。
