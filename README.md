@@ -1,5 +1,7 @@
 # ComfyUI-Sprite-Forge
 
+**繁體中文** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [English](README.en.md)
+
 **把角色圖片變成遊戲用的透明動畫，讓 Codex 幫你操作。**
 
 例如：上傳一張角色圖，製作跑步動作，再輸出透明 PNG 圖集與 GIF 預覽。影片由你電腦上的 **ComfyUI** 生成，不需要雲端生成 API key。
@@ -15,9 +17,9 @@
 
 ## 怎麼安裝？
 
-把下面這段話貼給你的 Codex，將網址換成這個專案真正的 GitHub 網址：
+把下面這段話貼給你的 Codex：
 
-> 安裝 comfyui-sprite-forge：https://github.com/你的帳號/ComfyUI-Sprite-Forge 。請依專案的安裝說明安裝全部技能，保留原版和其他技能。我的本機 ComfyUI 已能跑 H3；請協助設定我的工作流並檢查能否使用。需要檔案位置時再問我，不要自動下載模型或開始生成影片。
+> 安裝 comfyui-sprite-forge：https://github.com/yuwechang/ComfyUI-Sprite-Forge 。請依專案的安裝說明安裝全部技能，保留原版和其他技能。我的本機 ComfyUI 已能跑 H3；請協助設定我的工作流並檢查能否使用。需要檔案位置時再問我，不要自動下載模型或開始生成影片。
 
 安裝完成後，**開一個新的 Codex 對話**再使用。
 
