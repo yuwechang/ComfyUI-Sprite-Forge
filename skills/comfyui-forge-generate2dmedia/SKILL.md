@@ -10,7 +10,7 @@ description: Generate image-to-video only through local ComfyUI; check local wor
 - `python scripts/comfyui_media.py --check`: local read-only nodes/models check, no generation.
 - `python scripts/forge_doctor.py --save REPORT.json`: same local readiness, never key/CLI inspection.
 - `python scripts/route_media.py video --reference INPUT --prompt-file PROMPT --duration 3 --out-dir NEW --dry-run`: validate without network or filesystem writes.
-- Omit --dry-run only when the user requests generation. Canvas comes from reference dimensions; --resolution does not resize it. Request3s,24fps,32-multiple dimensions; frame count follows configured cadence.
+- Omit --dry-run only when the user requests generation. Canvas comes from reference dimensions; --resolution does not resize it. Use the source dimensions/duration/fps confirmed by the animation specification flow, with32-multiple dimensions; frame count uses shared `frame_rules.py` and configured cadence, not a separate calculation. Defaults are24fps,17k+5,min5 in the project template; other workflows can override.
 - `python scripts/comfyui_media.py --resume FOLDER`: poll a pending job or verify a completed artifact, no resubmission. Unknown outcomes require queue/history inspection.
 
 Configuration discovery is documented below. For a user's own API-format graph, read [workflow mapping](references/local-workflow.md). Do not guess node IDs, alter ComfyUI or download models. Output history must contain an MP4 from the configured node; arbitrary SaveVideo shapes are not universally supported.

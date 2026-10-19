@@ -13,3 +13,5 @@ Pending jobs are resumed, unknown jobs require queue/history inspection, complet
 Run python tools/test_release.py for the supported offline release suite. Use a writable workspace TEMP/TMP if the OS temporary directory is blocked. Validate coexistence against isolated destinations, not another person's real installation.
 
 Keep private local settings, workflows, generated media, keys, virtual environments and backups out of Git. Do not commit another person's path or replace repository placeholders with an invented GitHub URL. Retain this AGENTS.md in Git so an installing Codex can discover the protocol.
+
+Before animation generation, follow skills/comfyui-forge-video2dsprite/references/specification-guide.md: localized first-use/reuse confirmation, deterministic source recommendations and cadence, user-confirmed project-local preferences, and clean standard ZIP delivery. Do not silently reuse the author's prior settings or treat a saved specification as permission to submit a new job.

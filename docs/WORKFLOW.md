@@ -86,3 +86,9 @@ input.png 與 prompt.txt 必須是你提供或準備的實際檔案。--dry-run 
 ## 可以交給朋友的 Codex 的提示詞
 
 > 我的 ComfyUI 已能正常執行這份 H3 API workflow：〈我的 JSON 路徑〉。請讀取 docs/WORKFLOW.md，建立此專案的 config.local.json，找出首圖、提示詞、寬高、總影格、fps與MP4輸出節點。保留原始 JSON；不相容時先說明需要調整的節點。安裝全部五個 skills，然後做 --check 與 dry-run，不要下載模型或提交 GPU 任務。
+
+## 初始規格工具的設定
+
+`animation_spec.py`與提交adapter共用影格計算，無須解析度選擇器節點。`frame_minimum`可選（範本為5），配合`fps`、`frame_multiple`、`frame_offset`計算。Python `round`採最近整數、正中間取偶數；若Expression使用不同取整方式，請先統一。綁定`length`必須接收已對齊的總影格數，不要再把影格數當秒數乘24。
+
+可在私人config加入已確認的最低尺寸，例如 `"planning": {"minimum_source_size": [512, 512], "dimension_multiple": 32}`。此512只是格式示意，不是所有模型最低值；請依自己的workflow實測填寫。自訂來源fps先更新私人config並確認fps綁定與輸出一致，工具不會靜默修改原workflow。

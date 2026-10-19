@@ -42,3 +42,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Confirmed animation preferences belong to the user/project, never the public repo
+.comfyui-sprite-forge.preferences.local.json

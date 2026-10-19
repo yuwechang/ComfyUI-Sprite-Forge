@@ -38,5 +38,6 @@
   "last_frame_input": [
     "349",
     "last_frame"
-  ]
+  ],
+  "frame_minimum": 5
 }

@@ -57,6 +57,12 @@ By default, the tool requests about **3 seconds** of source video, then selects 
 
 The character is scaled proportionally into a transparent canvas; the entire video is not stretched into a square. Check the result for character consistency, motion, and background-removal quality.
 
+## First use and delivery
+
+First use asks whether to adopt final 128×128, 1 second, 8 fps and source 640×640, 3 requested seconds, 24 fps. Choose No to specify final requirements, then select calculated performance/balanced/quality or custom source settings. Confirmed preferences stay in your local project; later requests ask whether to reuse them. Codex presents the workflow in your conversation language.
+
+The longer source provides multiple complete action candidates to choose from; final playback does not automatically last 3 seconds or repeat 3 times. Standard delivery ZIP contains only selected PNG frames, a transparent animation sheet, GIF preview and source video. Previews appear in chat; JSON/logs/reports remain in the linked working directory.
+
 ## More details
 
 - [Full installation guide](INSTALL.md), also intended for the Codex doing the installation.

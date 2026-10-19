@@ -23,7 +23,7 @@
 
 ## 2. 建立設定
 
-先複製 config.example.json 成 config.local.json。以下 ID 來自隨附範例，**需要換成你的實際節點 ID 與 inputs 名稱**：
+先複製 config.example.json 成 config.local.json。本專案不附可執行 workflow。以下 ID 只是設定格式示意，**需要換成你的實際節點 ID 與 inputs 名稱**：
 
 ```json
 {
@@ -61,7 +61,7 @@
 
 沒有尾圖功能時，**同時刪掉 bindings.last_image 與 last_frame_input**，也不要使用 --last-frame。節點的 ID 一律為字串，例如 `"349"`。
 
-範例 `17k+5` 表示總影格數對齊至 5、22、39、56、73……，3 秒 ×24 fps =72 格，向上對齊為73格。這是目前 H3 範例的設定，不是所有模型的通用規則。自己的工作流若不同，應依節點規則設定 frame_multiple/frame_offset，例如允許任意正整數時為1與0。不要憑猜測修改。
+範例 `17k+5` 表示總影格數對齊至 5、22、39、56、73……，3 秒 ×24 fps =72 格，向上對齊為73格。這是影格對齊的示意設定，不是所有模型的通用規則。自己的工作流若不同，應依節點規則設定 frame_multiple/frame_offset，例如允許任意正整數時為1與0。不要憑猜測修改。
 
 目前工具仍要求輸入圖寬高為32的倍數。先等比例縮放角色並留背景空間，再送入；不要將角色硬拉到另一個長寬比。已記錄 registration_job 的輸入若改尺寸，需要重新準備登錄資料。
 
@@ -86,3 +86,9 @@ input.png 與 prompt.txt 必須是你提供或準備的實際檔案。--dry-run 
 ## 可以交給朋友的 Codex 的提示詞
 
 > 我的 ComfyUI 已能正常執行這份 H3 API workflow：〈我的 JSON 路徑〉。請讀取 docs/WORKFLOW.md，建立此專案的 config.local.json，找出首圖、提示詞、寬高、總影格、fps與MP4輸出節點。保留原始 JSON；不相容時先說明需要調整的節點。安裝全部五個 skills，然後做 --check 與 dry-run，不要下載模型或提交 GPU 任務。
+
+## 初始規格工具的設定
+
+`animation_spec.py`與提交adapter共用影格計算，無須解析度選擇器節點。`frame_minimum`可選（範本為5），配合`fps`、`frame_multiple`、`frame_offset`計算。Python `round`採最近整數、正中間取偶數；若Expression使用不同取整方式，請先統一。綁定`length`必須接收已對齊的總影格數，不要再把影格數當秒數乘24。
+
+可在私人config加入已確認的最低尺寸，例如 `"planning": {"minimum_source_size": [512, 512], "dimension_multiple": 32}`。此512只是格式示意，不是所有模型最低值；請依自己的workflow實測填寫。自訂來源fps先更新私人config並確認fps綁定與輸出一致，工具不會靜默修改原workflow。

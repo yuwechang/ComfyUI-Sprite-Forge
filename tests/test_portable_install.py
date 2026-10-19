@@ -43,6 +43,11 @@ class PortableInstallTests(unittest.TestCase):
             result=json.loads(dry.stdout);self.assertEqual(result['route'],'local:comfyui')
             self.assertAlmostEqual(result['durationUsed'],73/24)
             self.assertFalse((base/'never-created').exists())
+            planned=self.run_tool(dest/'comfyui-forge-video2dsprite/scripts/animation_spec.py','plan','--mode','loop','--config',config,cwd=base)
+            self.assertEqual(planned.returncode,0,planned.stderr)
+            self.assertEqual(json.loads(planned.stdout)['sourceOptions']['balanced']['size'],[640,640])
+            self.assertEqual(json.loads(planned.stdout)['sourceOptions']['balanced']['frameCount'],73)
+
             self.assertEqual(self.run_tool(ROOT/'tools/install_skills.py','--check','--dest',dest).returncode,0)
             config.rename(base/'moved-config.json')
             missing=self.run_tool(dest/'comfyui-forge-generate2dmedia/scripts/route_media.py','resolve','--kind','video')

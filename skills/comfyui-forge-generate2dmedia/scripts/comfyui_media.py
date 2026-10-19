@@ -12,6 +12,7 @@ import time
 from urllib import parse, request
 from urllib.error import HTTPError
 import uuid
+from frame_rules import from_config as source_frame_count
 
 
 class ComfyError(Exception):
@@ -75,11 +76,10 @@ def load_graph(config):
 def prepare(config, graph, *, prompt, first, last, width, height, duration):
     graph = copy.deepcopy(graph)
     fps = float(config["fps"])
-    multiple, offset = config.get("frame_multiple", 1), config.get("frame_offset", 0)
-    if not math.isfinite(fps) or fps <= 0 or not isinstance(multiple, int) or multiple < 1 or not 0 <= offset < multiple:
-        raise ComfyError("invalid frame cadence")
-    frames = max(1, round(duration * fps))
-    frames += (offset - frames) % multiple
+    try:
+        frames = source_frame_count(config, duration)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ComfyError(str(exc)) from exc
     values = dict(image=first, prompt=prompt, width=width, height=height, length=frames)
     for key, value in values.items():
         node, field = config["bindings"][key]
