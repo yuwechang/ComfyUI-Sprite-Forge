@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from PIL import Image
+from test_comfyui_media import GRAPH, CONFIG
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -23,8 +24,9 @@ class PortableInstallTests(unittest.TestCase):
             # Preserve a real-looking upstream namespace and its manifest.
             upstream=dest/'video2dsprite';upstream.mkdir();(upstream/'SKILL.md').write_text('upstream untouched',encoding='utf-8')
             (dest/'.agent-sprite-forge.install.json').write_text('original manifest',encoding='utf-8')
-            (base/'workflow.json').write_bytes((ROOT/'local-comfyui/workflow-api.example.json').read_bytes())
-            cfg=json.loads((ROOT/'local-comfyui/config.example.json').read_text(encoding='utf-8'))
+            # Synthetic graph with fake node types: tests only, no model/workflow distribution.
+            (base/'workflow.json').write_text(json.dumps(GRAPH),encoding='utf-8')
+            cfg=json.loads(json.dumps(CONFIG))
             cfg['workflow']='workflow.json';config=base/'my-config.json';config.write_text(json.dumps(cfg),encoding='utf-8')
             installed=self.run_tool(ROOT/'tools/install_skills.py','--apply','--dest',dest,'--config',config)
             self.assertEqual(installed.returncode,0,installed.stderr)

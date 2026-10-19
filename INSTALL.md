@@ -7,7 +7,7 @@
 1. **讀取來源。** 取得使用者提供的 repository，先讀 README.md、這份文件與 AGENTS.md。將完整專案 clone／下載到使用者選擇的永久資料夾；未指定時使用合適的專案資料夾，不要把暫存解壓目錄當永久來源。
 2. **保留其他安裝。** 確認目的 skills 路徑。只以本專案 `tools/install_skills.py` 安裝 `comfyui-forge-*`；不要卸載原版，不要覆蓋它的五個未加前綴目錄、manifest、設定或其他技能。
 3. **找 Python 與 ffmpeg。** 找能執行的 Python 3.10+。在此專案建立 `.venv` 並安裝 requirements.txt；依環境正常的授權流程處理網路與檔案權限。不要替換 ComfyUI 自己的 Python。檢查 ffmpeg/ffprobe 的存在與功能；缺少時明確列出，未經使用者授權不要下載外部執行檔。
-4. **找使用者的 workflow。** 使用者應已能在本機 ComfyUI 跑 H3。若未提供 API JSON 的位置，請詢問檔案位置；不要猜測另一台電腦的模型路徑，也不要假設隨附範例可直接執行。使用者明確要求試用隨附範例時，才用那份範例並檢查本機相容性。
+4. **找使用者的 workflow。** 使用者應已能在本機 ComfyUI 跑 H3。若未提供 API JSON 的位置，請詢問檔案位置；不要猜測另一台電腦的模型路徑，本專案不附工作流，安裝技能不包含安裝 ComfyUI、模型或 custom nodes。
 5. **建立私人設定。** 依 docs/WORKFLOW.md 解析 API JSON，建立 local-comfyui/config.local.json，設定正確 bindings、output_node 與模型影格規則。workflow 可以是檔案的絕對路徑，也可相對 config.local.json；不要改動使用者原始 workflow，必要時另存副本。個人設定與 workflow.local.json 已被 .gitignore 排除。
 6. **安裝所有技能。** 用選定 Python 執行下方安裝命令，不加 `--skills` 以免漏裝。安裝程式會備份本修改版舊檔、複製 scripts/references/agents、寫獨立 manifest 及 `comfyuiConfig` 指向。這個指向讓已安裝的工具自動找到設定，不需寫入全域 FORGE_* 或 Codex 設定。
 7. **分開驗證。** 執行 installer --check、tools/test_release.py；用已安裝路徑的 comfyui_media.py --check，再用使用者提供的、尺寸合法的圖片與短提示詞執行 --dry-run。未提供圖片時先完成安裝及唯讀檢查，並說明尚未執行 dry-run；不要宣稱全部完成。只有使用者另外要求生成測試時才 POST GPU 任務。

@@ -29,6 +29,8 @@ To try it, tell Codex: “Use examples/sample-character.png from this project to
 
 Models are not included, and this project does not install ComfyUI for you. You can ask Codex to check and install the other software dependencies.
 
+No ComfyUI workflow is bundled. Bring your own API JSON that already generates videos successfully.
+
 ## How to install
 
 Copy this message into your Codex:
@@ -61,7 +63,6 @@ The character is scaled proportionally into a transparent canvas; the entire vid
 - [Setting up your own workflow](docs/WORKFLOW.md)
 - [Usage and animation settings](docs/USAGE.md)
 - [Attribution and changes](NOTICE.md)
-- [Before publishing on GitHub](PUBLISH.md)
 
 These detailed guides are currently written in Traditional Chinese; you can ask Codex to explain them in your language.
 

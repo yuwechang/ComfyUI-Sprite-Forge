@@ -1,8 +1,9 @@
-# 本機設定（私人檔案不提交）
+# 接入使用者自己的 ComfyUI
 
-- `config.example.json`：可提交的bindings範本。
-- `workflow-api.example.json`：本機H3／SelfLift流程的結構範例，模型名稱只作映射示範，未宣稱官方來源。
-- `config.local.json`：請自行建立；會被Git忽略。
-- `workflow.local.json`：請由你的ComfyUI匯出API格式；會被Git忽略。
+這裡只有設定範本，沒有附帶工作流、模型或 ComfyUI 安裝程式。
 
-範例JSON不是自動下載或安裝模型的指令。接入自己的workflow請讀 [WORKFLOW.md](../docs/WORKFLOW.md)。安裝程式不會偷偷拿範例代替私人設定。
+- `config.example.json`：連線與節點 bindings 的格式範本。節點 ID 與影格規則僅為示意，請依自己的 API JSON 調整。
+- `config.local.json`：依範本建立的個人設定，已被 Git 忽略。
+- `workflow.local.json`：可選的個人工作流存放位置，已被 Git 忽略。也可在設定中指向其他位置的 API JSON。
+
+請自行準備已能正常生成影片的本機 ComfyUI 與工作流。工作流路徑相對於設定檔解析；接入方法見 [WORKFLOW.md](../docs/WORKFLOW.md)。缺少私人設定時工具會停止，不會拿範例自動生成。

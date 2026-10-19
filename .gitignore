@@ -7,7 +7,7 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# Local/private configuration and workflow; examples are intentionally tracked
+# Local/private configuration and workflow; only config.example.json is shipped here
 .env
 .env.*
 !.env.example
