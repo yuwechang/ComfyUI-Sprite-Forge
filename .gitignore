@@ -1,0 +1,44 @@
+# Python / environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local/private configuration and workflow; examples are intentionally tracked
+.env
+.env.*
+!.env.example
+local-comfyui/config.local.json
+local-comfyui/config.json
+local-comfyui/workflow.local.json
+local-comfyui/workflow-api.json
+local-comfyui/*.local.json
+
+# Jobs, generated media, caches and backups
+outputs/
+work/
+runs/
+inputs/
+.forge/
+.tmp/
+*.csf-backup-*/
+.comfyui-sprite-forge.install.json
+test-results.local.json
+
+# Never vendor model weights or execution environments
+*.safetensors
+*.ckpt
+*.gguf
+*.pt
+*.pth
+node_modules/
+
+# OS/editor local state
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

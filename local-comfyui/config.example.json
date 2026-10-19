@@ -1,0 +1,42 @@
+{
+  "url": "http://127.0.0.1:8188",
+  "workflow": "workflow-api.example.json",
+  "output_node": "48",
+  "fps": 24,
+  "frame_multiple": 17,
+  "frame_offset": 5,
+  "bindings": {
+    "image": [
+      "11",
+      "image"
+    ],
+    "last_image": [
+      "12",
+      "image"
+    ],
+    "prompt": [
+      "7",
+      "value"
+    ],
+    "width": [
+      "349",
+      "width"
+    ],
+    "height": [
+      "349",
+      "height"
+    ],
+    "length": [
+      "349",
+      "length"
+    ],
+    "fps": [
+      "48",
+      "frame_rate"
+    ]
+  },
+  "last_frame_input": [
+    "349",
+    "last_frame"
+  ]
+}

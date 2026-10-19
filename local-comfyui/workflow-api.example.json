@@ -1,0 +1,275 @@
+{
+  "2": {
+    "inputs": {
+      "vae_name": "H3\\Video\\minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader"
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "H3\\Audio\\minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader"
+  },
+  "5": {
+    "inputs": {
+      "clip_name": "H3\\qwen3vl_32b_h3_ultra_uncensored_heretic_int8_convrot.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader"
+  },
+  "7": {
+    "inputs": {
+      "value": ""
+    },
+    "class_type": "PrimitiveStringMultiline"
+  },
+  "11": {
+    "inputs": {
+      "image": "example-first.png"
+    },
+    "class_type": "LoadImage"
+  },
+  "12": {
+    "inputs": {
+      "image": "example-last.png"
+    },
+    "class_type": "LoadImage"
+  },
+  "15": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode"
+  },
+  "18": {
+    "inputs": {
+      "unet_name": "H3\\FL2VA\\fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader"
+  },
+  "20": {
+    "inputs": {
+      "shift_video": 12,
+      "shift_audio": 3,
+      "model": [
+        "170",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3SigmaShift"
+  },
+  "48": {
+    "inputs": {
+      "frame_rate": 24.0,
+      "loop_count": 0,
+      "filename_prefix": "video/fl2va_video",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "294",
+        0
+      ],
+      "audio": [
+        "295",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine"
+  },
+  "169": {
+    "inputs": {
+      "attention": "comfy kitchen attention",
+      "model": [
+        "18",
+        0
+      ]
+    },
+    "class_type": "ModelAttentionBackend"
+  },
+  "170": {
+    "inputs": {
+      "selection": "vsa",
+      "selection.keep_percent": 10,
+      "start_percent": 0.2,
+      "end_percent": 1,
+      "dense_blocks": "",
+      "min_tokens": 12288,
+      "extra_tokens": 256,
+      "sink_conditioning": "exact_kv_and_rows",
+      "verbose": false,
+      "model": [
+        "169",
+        0
+      ]
+    },
+    "class_type": "BlockSparseAttention"
+  },
+  "294": {
+    "inputs": {
+      "samples": [
+        "304",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode"
+  },
+  "295": {
+    "inputs": {
+      "samples": [
+        "304",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio"
+  },
+  "304": {
+    "inputs": {
+      "seed": [
+        "311",
+        0
+      ],
+      "cfg": 1,
+      "transition_step": [
+        "312",
+        0
+      ],
+      "lowres_scale": 0.5,
+      "rho": 0,
+      "w_min": 0.5,
+      "w_max": 1,
+      "upscaler_model": "minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors",
+      "highres_tiling": false,
+      "upscaler_unload": true,
+      "model": [
+        "20",
+        0
+      ],
+      "positive": [
+        "349",
+        0
+      ],
+      "negative": [
+        "15",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "latent_image": [
+        "349",
+        1
+      ],
+      "sampler": [
+        "309",
+        0
+      ],
+      "sigmas": [
+        "310",
+        0
+      ]
+    },
+    "class_type": "SelfLiftH3Sampler"
+  },
+  "309": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect"
+  },
+  "310": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": [
+        "360",
+        1
+      ],
+      "denoise": 1,
+      "model": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler"
+  },
+  "311": {
+    "inputs": {
+      "value": 319869689656602
+    },
+    "class_type": "PrimitiveInt"
+  },
+  "312": {
+    "inputs": {
+      "value": 6
+    },
+    "class_type": "INTConstant"
+  },
+  "349": {
+    "inputs": {
+      "prompt": [
+        "7",
+        0
+      ],
+      "width": 1280,
+      "height": 736,
+      "length": 73,
+      "clip": [
+        "5",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "first_frame": [
+        "11",
+        0
+      ],
+      "last_frame": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ImageToVideo"
+  },
+  "360": {
+    "inputs": {
+      "expression": "a + b",
+      "values.a": [
+        "312",
+        0
+      ],
+      "values.b": [
+        "361",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression"
+  },
+  "361": {
+    "inputs": {
+      "value": 2
+    },
+    "class_type": "INTConstant"
+  }
+}
