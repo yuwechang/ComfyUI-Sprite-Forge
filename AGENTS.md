@@ -4,7 +4,7 @@ This is an unofficial fork of https://github.com/0x0funky/agent-sprite-forge by 
 
 For an explicit user request to install this repository, follow INSTALL.md. Preserve the whole repository and install ALL five comfyui-forge-* sibling skills with tools/install_skills.py. Never install just SKILL.md. Do not modify original Sprite Forge directories, manifests, credentials or environment variables. Do not treat a user request to prepare release files as permission to install into the user's real skills directory.
 
-The sole generation provider is local ComfyUI. Still-image generation is not configured. Never add cloud/API-key/CLI fallback. User-supplied files and offline processing remain supported.
+The sole generation provider is local ComfyUI. Still-image generation is not configured. Never add cloud/API-key/CLI fallback. User-supplied files and offline processing remain supported. Before animation, assess whether the reference fits the requested action as described in skills/comfyui-forge-video2dsprite/SKILL.md. An optional action still prepared separately with an available, user-authorized image tool is an input asset, not a provider fallback; preserve local-only preferences and obtain approval of the new still before video submission. Do not require a sketch or assume Image 2.5 is available.
 
 The user's ComfyUI must already run their H3 workflow. Read docs/WORKFLOW.md to bind their own Export (API) JSON. Ask for its path when missing. Do not download models, modify ComfyUI, install custom nodes or send GPU jobs merely to validate installation. --check is read-only; --dry-run does not submit.
 

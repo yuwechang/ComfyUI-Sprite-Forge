@@ -7,7 +7,7 @@ description: Prepare, key, slice, scale, inspect and package supplied character/
 
 Work from user-supplied images. Use scripts/ --help and references/ for master validation, keying, sheet inspection, slicing, scale registration, palettes, atlas packing and engine exports. Inspect appearance and alpha edges at game size.
 
-Character motion from one still belongs to [local video animation](../comfyui-forge-video2dsprite/SKILL.md). This installation does not generate new master stills or call another image tool as a fallback. master_still generation will stop because no image workflow is configured; use its prepare/inspection capabilities only where appropriate. Keep one scale and common anchor across an action's frames.
+Character motion from one still belongs to [local video animation](../comfyui-forge-video2dsprite/SKILL.md). This installation does not generate new master stills or call another image tool as a fallback. For motion requiring a substantially different starting pose, follow the action-reference assessment in the linked animation skill: a separate, user-authorized image tool may prepare an approved input asset, but is not a generation route or dependency of this skill. Text alone can describe the pose; a sketch is optional. master_still generation will stop because no image workflow is configured; use its prepare/inspection capabilities only where appropriate. Keep one scale and common anchor across an action's frames.
 
 ## Local installation
 
