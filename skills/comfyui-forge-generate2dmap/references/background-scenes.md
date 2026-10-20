@@ -15,7 +15,7 @@ Image-to-video adds organic continuity but can warp identity, geometry and pixel
 Reserve a continuous dry standing plane and enough depth for both parties. Support bands belong in metadata/debug views. Feet must not land in water/cliffs/distant scenery; leave space for commands/portraits and strong effects. Fixed complete paintings may contain buildings/trees; independent gameplay actors remain separate.
 
 - **Masked motion (default for detailed plates):** the accepted plate stays sharp; only reviewed regions show the clip's motion, composited with one fixed transform. Workflow below.
-- **Full-frame sequence:** individual complete frames from the same accepted master, with observable phases (flame leans/rises/settles; cloth changes pose). Four full-size outputs keep more detail than four cells of one image. Repeated texture shimmer is not meaningful motion; referencing only the previous generated frame accumulates drift. Package with `assemble_frames.py` (see Full-frame loops).
+- **Full-frame sequence:** individual complete frames from the same accepted master, with observable phases (flame leans/rises/settles; cloth changes pose). Four full-size outputs keep more detail than four cells of one image. Repeated texture shimmer is not meaningful motion; referencing only the previous generated frame accumulates drift. Package with `comfyui_forge_assemble_frames.py` (see Full-frame loops).
 - **Full-frame image-to-video:** for fixed battle/menu scenes when movement and decode size justify it. Lock camera and architecture. A looping prompt does not guarantee a seamless loop. Run it through the masked route with one region covering the plate and protected cores on landmarks, so the same loop policy and decoded QA apply.
 
 Use [$comfyui-forge-video2dsprite](../../comfyui-forge-video2dsprite/SKILL.md) for transparent actor/prop clips and packed alpha; use [$comfyui-forge-generate2dmedia](../../comfyui-forge-generate2dmedia/SKILL.md) for a selected video API. Ordinary MP4 is not transparent video, and a filename cannot establish codec support.
@@ -44,21 +44,21 @@ Commands run from the project root; `<skill-dir>` is this skill's folder (`${CLA
 3. Build the mask; the envelope grows each region to contain every pixel the clip really moves, and reports motion inside protected cores or far from every region:
 
 ```bash
-python "<skill-dir>/scripts/build_motion_mask.py" --plan scenes/m01/motion-plan.json --plate scenes/m01/plate.png --envelope-from scenes/m01/clip.mp4 --output-dir scenes/m01/mask
+python "<skill-dir>/scripts/comfyui_forge_build_motion_mask.py" --plan scenes/m01/motion-plan.json --plate scenes/m01/plate.png --envelope-from scenes/m01/clip.mp4 --output-dir scenes/m01/mask
 ```
 
    Look at `mask-overlay.png` (cyan: motion, red: protected cores, magenta: excluded motion) and `mask-qa.json` (`protectedMax` is 0; `meanOpacity` below 0.07 warns that motion will be invisible).
 4. Build the loop. Frames are composited only inside the mask (outside it every pre-encode frame equals the plate), looped by policy, encoded with closed GOPs aligned to the loop, decoded again and gated:
 
 ```bash
-python "<skill-dir>/scripts/scene_motion.py" build --plan scenes/m01/motion-plan.json --plate scenes/m01/plate.png --clip scenes/m01/clip.mp4 --mask scenes/m01/mask/motion-mask.png --output-dir scenes/m01/loop
+python "<skill-dir>/scripts/comfyui_forge_scene_motion.py" build --plan scenes/m01/motion-plan.json --plate scenes/m01/plate.png --clip scenes/m01/clip.mp4 --mask scenes/m01/mask/motion-mask.png --output-dir scenes/m01/loop
 ```
 
    Outputs: `loop.mp4` (plate size, padded by one row or column when a dimension is odd), `poster.png` (decoded loop frame 0 over the plate, so swapping to the video changes no pixel), `motion-mask.png` (the mask as applied, including fades where the clip does not reach the plate edge) and `scene-motion.json` (transform, frame map, encode attempts, QA). A frame folder works as `--clip` with `--fps 24`.
 5. QA the decoded file again whenever it is re-encoded, copied into a game or compared with another build:
 
 ```bash
-python "<skill-dir>/scripts/scene_motion.py" qa --report scenes/m01/loop/scene-motion.json --plate scenes/m01/plate.png --output-dir scenes/m01/loop-qa
+python "<skill-dir>/scripts/comfyui_forge_scene_motion.py" qa --report scenes/m01/loop/scene-motion.json --plate scenes/m01/plate.png --output-dir scenes/m01/loop-qa
 ```
 
 ### Loop policy
@@ -115,7 +115,7 @@ Never call a loop seamless without these numbers: quote `decoded_seam`, the fram
 For a few complete generated frames (flame phases, a waving banner), package them with the generate2dsprite assembler instead of a video. `--sequence` sets the played order (a mirrored order suits sway only) and `--static-regions` takes a JSON file of named boxes that must not move, such as `{"gate": [610, 220, 860, 540]}`:
 
 ```bash
-python "<generate2dsprite-dir>/scripts/assemble_frames.py" --input scenes/shrine/f0.png scenes/shrine/f1.png scenes/shrine/f2.png scenes/shrine/f3.png --sequence 0,1,2,3,2,1 --duration 160 --static-regions scenes/shrine/static-regions.json --output-dir scenes/shrine/full-frame-loop
+python "<generate2dsprite-dir>/scripts/comfyui_forge_assemble_frames.py" --input scenes/shrine/f0.png scenes/shrine/f1.png scenes/shrine/f2.png scenes/shrine/f3.png --sequence 0,1,2,3,2,1 --duration 160 --static-regions scenes/shrine/static-regions.json --output-dir scenes/shrine/full-frame-loop
 ```
 
 The assembler does not register, key or mask the frames; its static-region numbers are diagnostics, not proof of a seamless loop. Inspect the wrap and the landmarks at gameplay scale.
@@ -129,7 +129,7 @@ Preserve `sourceSize` and `sourceAnchor` across still/video variants. Source fra
 
 Show `poster.png` immediately. Swap only after a drawable frame is ready with matching crop/anchor; a filename load or resolved `play()` promise does not prove visible pixels. Recover to the poster after autoplay/decoder failure. Test actual supported browsers over light/dark scenes, including iPhone Safari/Chrome.
 
-While it builds, `scene_motion.py build` writes every composited loop frame as a full-plate PPM into `.frames` inside the staged output folder (about width x height x 3 bytes per frame: a 136-frame 1280x720 loop needs about 330 MB of free disk, a 1672x941 one about 640 MB); the folder is removed before publishing.
+While it builds, `comfyui_forge_scene_motion.py build` writes every composited loop frame as a full-plate PPM into `.frames` inside the staged output folder (about width x height x 3 bytes per frame: a 136-frame 1280x720 loop needs about 330 MB of free disk, a 1672x941 one about 640 MB); the folder is removed before publishing.
 
 Budget **concurrent decoders, decoded pixels/sec and GPU uploads**, not only download bytes: `scene-motion.json` records `bytes` and `decodedPixelsPerSecond` per loop. For scale, one shipped set was five 1672x941 battle loops, 137 frames at 24 fps (5.7 s) each: 5,337,448 bytes of video and 179,455 bytes of masks. Pause/release offscreen and prior-map clips, prefetch likely neighbours, cap creation and prioritise actors over decorations. Low quality should drop optional motion (show the poster), not break geometry or show black rectangles.
 

@@ -1,12 +1,12 @@
 # Scene preview: walk a map bundle in one HTML file
 
-`scripts/build_scene_preview.py` turns a `map_bundle.v2` into `preview.html`, a single page that opens straight from disk: every image is an embedded data URI and the collision walker, [runtime/map-runtime.mjs](runtime/map-runtime.mjs), is inlined verbatim. A debug actor walks the bundle's collision with the keyboard or by clicking, objects and the actor are Y-sorted, and `window.__scene` exposes a snapshot and a route check. Use it to look at a playable map at world scale and to prove its routes before exporting it to an engine.
+`scripts/comfyui_forge_build_scene_preview.py` turns a `map_bundle.v2` into `preview.html`, a single page that opens straight from disk: every image is an embedded data URI and the collision walker, [runtime/map-runtime.mjs](runtime/map-runtime.mjs), is inlined verbatim. A debug actor walks the bundle's collision with the keyboard or by clicking, objects and the actor are Y-sorted, and `window.__scene` exposes a snapshot and a route check. Use it to look at a playable map at world scale and to prove its routes before exporting it to an engine.
 
-Run from the project root (`<skill-dir>` is this skill's folder; `${CLAUDE_SKILL_DIR}` in Claude Code). Validate the bundle with map_bundle.py first when it is available; the preview reads collision through the same rules map_nav.py proves reachability with.
+Run from the project root (`<skill-dir>` is this skill's folder; `${CLAUDE_SKILL_DIR}` in Claude Code). Validate the bundle with comfyui_forge_map_bundle.py first when it is available; the preview reads collision through the same rules comfyui_forge_map_nav.py proves reachability with.
 
 ```bash
-python "<skill-dir>/scripts/build_scene_preview.py" --bundle map/map_bundle.json --output-dir map/qa/preview
-python "<skill-dir>/scripts/build_scene_preview.py" --bundle map/map_bundle.json --prop-pack assets/props/prop-pack.json --output-dir map/qa/preview-2 --verify --strict
+python "<skill-dir>/scripts/comfyui_forge_build_scene_preview.py" --bundle map/map_bundle.json --output-dir map/qa/preview
+python "<skill-dir>/scripts/comfyui_forge_build_scene_preview.py" --bundle map/map_bundle.json --prop-pack assets/props/prop-pack.json --output-dir map/qa/preview-2 --verify --strict
 ```
 
 The output folder must be new; the build is staged and published only after its checks pass. Success prints one JSON line with `status`, `output_dir`, `preview`, `metadata`, `bytes`, `verify`, `warnings` and `failed` (the ids of failed checks). Exit codes: 0 when the published report passes or warns; 1 when it was published with status `fail` (a failed `--verify` without `--strict`), or when nothing was published (one `error: ...` line, nothing left behind); 2 on a usage error.
@@ -31,7 +31,7 @@ Not drawn or not used: `stage`, `lights`, `atmosphere`, `camera`, `animatedParts
 
 ## Collision and movement
 
-Collision is one blocking set for every map tool (integration decisions D1 and D2): the page gets it from `scripts/forge_nav.py`, the rule book N1-N15 that map_nav.py, the engine exporters and layout_build share, and map-runtime.mjs mirrors those rules rule for rule (its header lists them). Field reference: [schemas/map.schema.json](schemas/map.schema.json) (`collision`, `solid`, `footprint`, `tile`, `portal`).
+Collision is one blocking set for every map tool (integration decisions D1 and D2): the page gets it from `scripts/comfyui_forge_nav.py`, the rule book N1-N15 that comfyui_forge_map_nav.py, the engine exporters and layout_build share, and map-runtime.mjs mirrors those rules rule for rule (its header lists them). Field reference: [schemas/map.schema.json](schemas/map.schema.json) (`collision`, `solid`, `footprint`, `tile`, `portal`).
 
 - The actor footprint is an ellipse with `rx = actorRadius` and `ry = actorRadius * ySquash` (`ySquash` defaults to 1; HD-2D plates usually record 0.58). A position is valid when its centre and 8 points on that ellipse lie in the walk area and on no blocker. Without walk regions the walk area is the closed world box `[0, width] x [0, height]`; with them, a point is inside when some region contains it and none of that region's holes do (the even-odd rule).
 - Blockers are closed sets: a point on the boundary is blocked (rect `x <= px <= x + w`, ellipse `<= 1`, polygon interior or edge). They are `collision.solids`, `collision.rects`, the footprints of objects whose `solid` is not false, the collision of placed tiles and blocking `material_map` pixels. A shape without area blocks nothing.
@@ -65,7 +65,7 @@ For acceptance, run the route check (button, `window.__scene.traverseAll()` in t
 
 ## Using map-runtime.mjs in a game
 
-The page's walker is [runtime/map-runtime.mjs](runtime/map-runtime.mjs), a dependency-free ES module a browser or node game can import as it is (`createMapRuntime`, `isValid`, `segmentClear`, `findPath`, `stepActor`, `traverseRoutes`). It reads no files, so two parts of the blocking set must reach it resolved: the collision of placed tiles and the material map. The preview passes them in the page; a game gets them from `map_nav.py check`, whose `nav-grid.json` holds them as `runtimeInputs`:
+The page's walker is [runtime/map-runtime.mjs](runtime/map-runtime.mjs), a dependency-free ES module a browser or node game can import as it is (`createMapRuntime`, `isValid`, `segmentClear`, `findPath`, `stepActor`, `traverseRoutes`). It reads no files, so two parts of the blocking set must reach it resolved: the collision of placed tiles and the material map. The preview passes them in the page; a game gets them from `comfyui_forge_map_nav.py check`, whose `nav-grid.json` holds them as `runtimeInputs`:
 
 ```js
 import {createMapRuntime, findPath} from "./map-runtime.mjs";

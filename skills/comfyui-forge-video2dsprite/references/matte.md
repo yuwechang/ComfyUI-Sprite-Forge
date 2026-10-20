@@ -1,6 +1,6 @@
 # Keying video frames (matte)
 
-`video2dsprite.py clean` and `process` turn chroma-backdrop frames into straight-alpha
+`comfyui_forge_video2dsprite.py clean` and `process` turn chroma-backdrop frames into straight-alpha
 RGBA frames (`clean_0000.png` onwards) and write `matte-report.json` beside them. The
 report is a `video2dsprite.matte_report.v1` document and a QA envelope (status, method,
 notProven, checks, hashed inputs and outputs). `process` also copies it, without the
@@ -17,7 +17,7 @@ is one JSON line naming the output and its metadata file.
 1. Plan the key before generating the clip:
 
    ```text
-   python "<skill-dir>/scripts/video2dsprite.py" key-plan --master art/hero-master.png
+   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" key-plan --master art/hero-master.png
    ```
 
    It prints the key (`magenta`, `green` or `blue`, first acceptable in that order)
@@ -33,7 +33,7 @@ is one JSON line naming the output and its metadata file.
 2. Triage the raw clip before processing it:
 
    ```text
-   python "<skill-dir>/scripts/video2dsprite.py" triage --video raw/hero-idle.mp4 --output-dir work/hero-idle-triage
+   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" triage --video raw/subject-motion.mp4 --output-dir work/subject-motion-triage
    ```
 
    `raw-triage.json` (`video2dsprite.raw_triage.v1`) reports size, rational fps,
@@ -45,9 +45,9 @@ is one JSON line naming the output and its metadata file.
 3. Key it, in one step or two:
 
    ```text
-   python "<skill-dir>/scripts/video2dsprite.py" process --video raw/hero-idle.mp4 --output-dir work/hero-idle --start 1 --duration 2 --reference art/hero-master.png
-   python "<skill-dir>/scripts/video2dsprite.py" extract --video raw/hero-idle.mp4 --output-dir work/hero-idle-raw --start 1 --duration 2
-   python "<skill-dir>/scripts/video2dsprite.py" clean --raw-dir work/hero-idle-raw --output-dir work/hero-idle-clean --reference art/hero-master.png
+   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" process --video raw/subject-motion.mp4 --output-dir work/subject-motion --start 1 --duration 2 --reference art/hero-master.png
+   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" extract --video raw/subject-motion.mp4 --output-dir work/subject-motion-raw --start 1 --duration 2
+   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" clean --raw-dir work/subject-motion-raw --output-dir work/subject-motion-clean --reference art/hero-master.png
    ```
 
    Raw frames are `frame_000000.png` onwards (0-based); `--start/--duration` keep the
@@ -56,15 +56,15 @@ is one JSON line naming the output and its metadata file.
    a time); the frames and the report are the same bytes whatever the thread count.
 
 4. Read the report's `status`, `checks` and `warnings`, then look at the frames over a
-   light and a dark background before registering (`register_clip.py apply`) and
+   light and a dark background before registering (`comfyui_forge_register_clip.py apply`) and
    packaging them:
 
    ```text
-   python "<skill-dir>/scripts/video2dsprite.py" package --clean-dir work/hero-idle/frames-clean --output-dir assets/hero-idle --name hero-idle --fps 24 --formats png,webm,packed --loop
-   python "<skill-dir>/scripts/video2dsprite.py" verify --package assets/hero-idle
+   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" package --clean-dir work/subject-motion/frames-clean --output-dir assets/subject-motion --name subject-motion --fps 24 --formats png,webm,packed --loop
+   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" verify --package assets/subject-motion
    ```
 
-   `package` and `verify` are `engine_export.py`'s verbs with every flag
+   `package` and `verify` are `comfyui_forge_engine_export.py`'s verbs with every flag
    ([pipeline.md](pipeline.md)): its key-residue gate reads the key from
    `frames-clean/matte-report.json`, and `--allow-key-residue` is the legacy switch that
    ships residue with a recorded override.
@@ -147,13 +147,13 @@ A character profile (`video2dsprite.character_profile.v1`) pins `mode`, `key`,
 character is keyed the same way:
 
 ```text
-python "<skill-dir>/scripts/video2dsprite.py" clean --raw-dir work/hero-attack-raw --output-dir work/hero-attack-clean --matte-profile art/hero-profile.json
+python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" clean --raw-dir work/subject-motion-raw --output-dir work/subject-motion-clean --matte-profile art/hero-profile.json
 ```
 
 A flag that contradicts the profile wins, prints a warning and is recorded in the
 report's `profile.deviations`, because that clip's matte now differs from the others.
 `unmix` belongs to the soft matte (`--no-unmix` takes edge colour from the
-neighbouring subject only), so `register_clip.py profile` writes `unmix` true only for a
+neighbouring subject only), so `comfyui_forge_register_clip.py profile` writes `unmix` true only for a
 soft profile, and `erode` as whole pixels.
 
 ## Gates and the report

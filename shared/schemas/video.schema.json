@@ -27,7 +27,7 @@
       }
     },
     "registration_job_v1": {
-      "description": "Written by prepare_i2v_input.py: where the master sits on the provider canvas, so register_clip.py can invert one fixed transform. workRegion is a half-open box on referenceCanvas; padding is [left, top, right, bottom]. sourceSize and sourceAnchor are the padded source canvas the registered frames use (prefer them to master.size/anchor, which differ for a view-box master); master.viewBox is the half-open crop of the master file that was placed. The job also records the action kind, the key choice, the clipped work region, the prompt timeline, the input image and the review guide.",
+      "description": "Written by comfyui_forge_prepare_i2v_input.py: where the master sits on the provider canvas, so comfyui_forge_register_clip.py can invert one fixed transform. workRegion is a half-open box on referenceCanvas; padding is [left, top, right, bottom]. sourceSize and sourceAnchor are the padded source canvas the registered frames use (prefer them to master.size/anchor, which differ for a view-box master); master.viewBox is the half-open crop of the master file that was placed. The job also records the action kind, the key choice, the clipped work region, the prompt timeline, the input image and the review guide.",
       "type": "object",
       "required": ["schema", "master", "referenceCanvas", "referenceScale", "referenceOffset", "keyColor", "workRegion", "action", "padding", "prompt"],
       "properties": {
@@ -60,8 +60,10 @@
           }
         },
         "tool": {"$ref": "common.schema.json#/$defs/toolInfo"},
-        "actionKind": {"enum": ["loop", "oneshot", "hold", "fx"]},
-        "returnsToRest": {"type": "boolean"},
+        "actionKind": {"enum": ["loop", "oneshot", "hold"]},
+        "motionType": {"enum": ["cycle", "oneshot-return", "oneshot-hold"]},
+        "motionDescription": {"type": "string", "minLength": 1},
+        "returnsToRest": {"type": ["boolean", "null"]},
         "sourceSize": {"$ref": "common.schema.json#/$defs/size2"},
         "sourceAnchor": {"$ref": "common.schema.json#/$defs/point2"},
         "anchorMode": {"type": "string", "minLength": 1},
@@ -72,7 +74,7 @@
         "workRegionClipped": {"type": "array", "items": {"type": "number", "minimum": 0}, "minItems": 4, "maxItems": 4},
         "margin": {"type": "number", "minimum": 0},
         "durationS": {"type": "number", "exclusiveMinimum": 0},
-        "calmSpanS": {"type": "number", "minimum": 0},
+        "calmSpanS": {"type": ["number", "null"], "minimum": 0},
         "timeline": {
           "type": "array",
           "items": {
@@ -95,7 +97,7 @@
       }
     },
     "character_profile_v1": {
-      "description": "One character's registration and matte settings, inherited by every clip so scale and keying cannot drift between clips (register_clip.py profile writes it; process --matte-profile reads the matte block). Each clip records its padded canvas, its registration.json and the job it was registered from; nativeFootBottomRange is the spread of the native foot line over the clips.",
+      "description": "One character's registration and matte settings, inherited by every clip so scale and keying cannot drift between clips (comfyui_forge_register_clip.py profile writes it; process --matte-profile reads the matte block). Each clip records its padded canvas, its registration.json and the job it was registered from; nativeFootBottomRange is the spread of the native foot line over the clips.",
       "type": "object",
       "required": ["schema", "id", "sourceSize", "sourceAnchor", "registration", "matte", "clips"],
       "properties": {
@@ -125,7 +127,7 @@
             "mode": {"enum": ["soft", "dominance", "binary"]},
             "key": {"$ref": "common.schema.json#/$defs/keyColor"},
             "erode": {"description": "Matte erosion in whole pixels (per D21).", "type": "integer", "minimum": 0},
-            "unmix": {"description": "Soft matte only: false takes edge colour from the neighbouring subject (KeyParams.unmix_from 1.0). It must be false for dominance and binary; register_clip.py profile defaults it to (mode == soft) per D21.", "type": "boolean"},
+            "unmix": {"description": "Soft matte only: false takes edge colour from the neighbouring subject (KeyParams.unmix_from 1.0). It must be false for dominance and binary; comfyui_forge_register_clip.py profile defaults it to (mode == soft) per D21.", "type": "boolean"},
             "despill": {"enum": ["off", "edge", "all", "auto"]},
             "params": {"description": "Every forge_matte.KeyParams field the profile pins (KeyParams.to_dict() form), beyond the named key, erode, unmix and despill settings.", "type": "object"}
           }
@@ -150,7 +152,7 @@
       }
     },
     "frame_selection_v2": {
-      "description": "A chosen frame range. forge-frame-selection/v1 (animation_review.py) stays valid and needs fps. v2 adds 0-based sourceIndices into [start, endExclusive) (repeats allow holds), one integer duration per index, the loop policy, events and the selecting method. sourceHashes and sourceFiles cover every frame of [start, endExclusive), as in v1; the range may be wider than the played sourceIndices (a loop whose last frames were held duplicates keeps its window). fps is the source frame rate the indices were sampled at; durations_ms are the playback timing and are authoritative (with ticks, the drift-free tick edges at tickHz). loopPolicy pingpong lists the forward frames only: players and packagers mirror them without duplicating the end frames (indices + indices[-2:0:-1]). v2 sourceDirectory is relative to the selection file, or only the directory name when no relative path exists (another drive), and readers then rely on the per-frame hashes. A status starting with reject, fail or unusable is refused by packagers. Optional speedRef, cycles and terminal are carried into animation.json.",
+      "description": "A chosen frame range. forge-frame-selection/v1 (comfyui_forge_animation_review.py) stays valid and needs fps. v2 adds 0-based sourceIndices into [start, endExclusive) (repeats allow holds), one integer duration per index, the loop policy, events and the selecting method. sourceHashes and sourceFiles cover every frame of [start, endExclusive), as in v1; the range may be wider than the played sourceIndices (a loop whose last frames were held duplicates keeps its window). fps is the source frame rate the indices were sampled at; durations_ms are the playback timing and are authoritative (with ticks, the drift-free tick edges at tickHz). Playback is forward; loopPolicy is cycle or oneshot. v2 sourceDirectory is relative to the selection file, or only the directory name when no relative path exists (another drive), and readers then rely on the per-frame hashes. A status starting with reject, fail or unusable is refused by packagers. Optional speedRef, cycles and terminal are carried into animation.json.",
       "type": "object",
       "required": ["schema", "sourceDirectory", "sourceHashes", "start", "endExclusive", "status"],
       "properties": {
@@ -162,7 +164,7 @@
         "sourceIndices": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
         "durations_ms": {"$ref": "common.schema.json#/$defs/durationsMs"},
         "fps": {"$ref": "common.schema.json#/$defs/fpsValue"},
-        "loopPolicy": {"$ref": "common.schema.json#/$defs/loopPolicy"},
+        "loopPolicy": {"enum": ["cycle", "oneshot"]},
         "impactMs": {"type": "integer", "minimum": 0},
         "holdMs": {"type": "integer", "minimum": 0},
         "events": {"type": "array", "items": {"$ref": "#/$defs/videoEvent"}},
@@ -172,7 +174,8 @@
         "reviewReason": {"type": "string"},
         "method": {"type": "string", "minLength": 1},
         "sourceFiles": {"description": "File names of the source frames in [start, endExclusive), parallel to sourceHashes.", "type": "array", "items": {"type": "string", "minLength": 1}},
-        "kind": {"enum": ["gait", "walk", "run", "idle", "hover", "attack", "cast", "hurt", "guard", "victory", "defeat", "fx", "other"]},
+        "kind": {"enum": ["cycle", "oneshot-return", "oneshot-hold"]},
+        "motionType": {"enum": ["cycle", "oneshot-return", "oneshot-hold"]},
         "cycles": {"type": "integer", "minimum": 1},
         "terminal": {"type": "boolean"},
         "confidence": {
@@ -432,7 +435,7 @@
       }
     },
     "take_v1": {
-      "description": "One line of takes.jsonl from register_clip.py qc: the take's verdict, reasons and metrics, plus the job it was registered for, the action, the source (a frame folder or a video), warnings and its QA envelope.",
+      "description": "One line of takes.jsonl from comfyui_forge_register_clip.py qc: the take's verdict, reasons and metrics, plus the job it was registered for, the action, the source (a frame folder or a video), warnings and its QA envelope.",
       "type": "object",
       "required": ["take", "status", "reasons", "metrics"],
       "properties": {
@@ -489,7 +492,7 @@
       "then": {"properties": {"issues": {"minItems": 1}}}
     },
     "animation_v3": {
-      "description": "animation.json written by engine_export.py package. schemaVersion 2.0 (cfed170) stays valid. 3.0 keeps every 2.0 key and adds selection timing (0-based sourceIndices, one durationsMs entry per frame), events, a registration object instead of the 2.0 string, a QA envelope in qa, and transport records. sourceRect stays [x, y, width, height] in source pixels; file names are relative to the manifest. fps keeps the 2.0 number and fpsRational is the exact transport rate; fpsCapped says the clip was reduced to at most 60 fps without changing its length (inputFps is the rate before) and pingpongBaked that a pingpong policy was baked into one cycle (0 1 2 3 2 1). registration may also carry legacyMode (the 2.0 string), registrationSha256 (a non-job registration record), sourceSize, sourceAnchor and action. qa carries the 2.0 diagnostics plus keyResidue (the residue gate: key, frames measured, opaque key pixels, ring spill, semitransparency, pockets, key-hued pixels, limits, thresholds and method; per D18 the gate measures a copy with alpha <= 16 zeroed and records that floor in thresholds and method), seamReport (common seamReport), allowKeyResidue and keySource (where the gate's key came from, per D17).",
+      "description": "animation.json written by comfyui_forge_engine_export.py package. schemaVersion 2.0 (cfed170) stays valid. 3.0 keeps every 2.0 key and adds selection timing (0-based sourceIndices, one durationsMs entry per frame), events, a registration object instead of the 2.0 string, a QA envelope in qa, and transport records. sourceRect stays [x, y, width, height] in source pixels; file names are relative to the manifest. fps keeps the 2.0 number and fpsRational is the exact transport rate; fpsCapped says the clip was reduced to at most 60 fps without changing its length (inputFps is the rate before). registration may also carry legacyMode (the 2.0 string), registrationSha256 (a non-job registration record), sourceSize, sourceAnchor and action. qa carries the 2.0 diagnostics plus keyResidue (the residue gate: key, frames measured, opaque key pixels, ring spill, semitransparency, pockets, key-hued pixels, limits, thresholds and method; per D18 the gate measures a copy with alpha <= 16 zeroed and records that floor in thresholds and method), seamReport (common seamReport), allowKeyResidue and keySource (where the gate's key came from, per D17).",
       "type": "object",
       "required": ["schemaVersion", "name", "sourceSize", "sourceAnchor", "fps", "frameCount", "durationSeconds", "loop", "poster", "fallback", "qa"],
       "properties": {
@@ -553,10 +556,10 @@
         "impactMs": {"type": "integer", "minimum": 0},
         "holdMs": {"type": "integer", "minimum": 0},
         "terminal": {"type": "boolean"},
-        "loopPolicy": {"$ref": "common.schema.json#/$defs/loopPolicy"},
+        "loopPolicy": {"enum": ["cycle", "oneshot"]},
         "events": {"type": "array", "items": {"$ref": "#/$defs/videoEvent"}},
         "cadenceMs": {"type": "number", "exclusiveMinimum": 0},
-        "cycles": {"type": "number", "exclusiveMinimum": 0},
+        "cycles": {"type": "integer", "minimum": 1},
         "strideWorldUnits": {"type": "number", "exclusiveMinimum": 0},
         "speedRef": {"type": "number", "exclusiveMinimum": 0},
         "displayScale": {"type": "number", "exclusiveMinimum": 0},
@@ -590,7 +593,6 @@
         "fpsRational": {"description": "Exact transport rate of the video files, num/den; fps keeps the 2.0 number.", "type": "string", "pattern": "^[1-9][0-9]*/[1-9][0-9]*$"},
         "fpsCapped": {"description": "The clip was reduced to at most 60 fps without changing its length.", "type": "boolean"},
         "inputFps": {"$ref": "common.schema.json#/$defs/fpsValue"},
-        "pingpongBaked": {"description": "A pingpong policy was baked into one cycle (0 1 2 3 2 1).", "type": "boolean"},
         "tickExpansion": {"description": "Uneven whole-tick durations expanded for video transports (engine_export, D21): each authored frame is repeated ticks[i] times at rate; sourceIndices and durationsMs are the expanded timeline.",
                           "type": "object", "required": ["rate", "ticks", "authoredSourceIndices", "authoredDurationsMs"],
                           "properties": {"rate": {"$ref": "common.schema.json#/$defs/fpsValue"},
@@ -619,7 +621,7 @@
       "else": {"properties": {"registration": {"type": "string", "minLength": 1}}}
     },
     "registration_v1": {
-      "description": "registration.json written by register_clip.py apply (registration by construction). One transform maps every frame of the provider video onto the source canvas: output = video * transform.inverse.scale + transform.inverse.offset + the frame's whole-pixel lock shift. sourceSize/sourceAnchor are the padded canvas (animation.json sourceSize/sourceAnchor); baseSize/baseAnchor the master canvas. lock.modes lists each lock mode at most once. hygiene, when present, is the forge_core.alpha_hygiene floor pass on the registered frames (mode floor, floor 4, per D18). Profile fx adds edge fades, a fade-in and a dissolve tail.",
+      "description": "registration.json written by comfyui_forge_register_clip.py apply (registration by construction). One transform maps every frame of the provider video onto the source canvas: output = video * transform.inverse.scale + transform.inverse.offset + the frame's whole-pixel lock shift. sourceSize/sourceAnchor are the padded canvas (animation.json sourceSize/sourceAnchor); baseSize/baseAnchor the master canvas. lock.modes lists each lock mode at most once. hygiene, when present, is the forge_core.alpha_hygiene floor pass on the registered frames (mode floor, floor 4, per D18). Profile fx adds edge fades, a fade-in and a dissolve tail.",
       "type": "object",
       "required": ["schema", "mode", "jobSha256", "clip", "action", "profile", "master", "anchorMode", "keyColor", "referenceCanvas", "referenceScale", "referenceOffset", "baseSize", "baseAnchor", "padding", "sourceSize", "sourceAnchor", "video", "transform", "lock", "frames", "qa"],
       "properties": {
@@ -749,7 +751,7 @@
       }
     },
     "palette_repair_v1": {
-      "description": "palette-repair.json from register_clip.py palette-repair: a QA envelope plus the rule, the regions (half-open boxes), the palette and the per-frame changes. Alpha never changes.",
+      "description": "palette-repair.json from comfyui_forge_register_clip.py palette-repair: a QA envelope plus the rule, the regions (half-open boxes), the palette and the per-frame changes. Alpha never changes.",
       "type": "object",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "required": ["schema", "rule", "regions", "palette", "frames", "totalChangedPx", "alphaUnchanged"],
@@ -777,7 +779,7 @@
       }
     },
     "package_provenance_v1": {
-      "description": "provenance.json beside animation.json (engine_export.py package): common provenance plus the input digest a review verdict may bind (sha256 of the newline-terminated list of frame sha256s in playback order). inputDirectory appears only when a relative path exists. It may also list the libraries and the selection, registration and review documents; inputs carry a role (frame, selection, registration, review, pipelineMeta).",
+      "description": "provenance.json beside animation.json (comfyui_forge_engine_export.py package): common provenance plus the input digest a review verdict may bind (sha256 of the newline-terminated list of frame sha256s in playback order). inputDirectory appears only when a relative path exists. It may also list the libraries and the selection, registration and review documents; inputs carry a role (frame, selection, registration, review, pipelineMeta).",
       "allOf": [{"$ref": "common.schema.json#/$defs/provenance"}],
       "type": "object",
       "required": ["schema", "inputDigest"],
@@ -788,7 +790,7 @@
       }
     },
     "verify_report_v1": {
-      "description": "verify-qa.json (engine_export.py verify): a QA envelope over the encoded files of one package, bound to its animation.json by sha256, with per-transport results and the thresholds used.",
+      "description": "verify-qa.json (comfyui_forge_engine_export.py verify): a QA envelope over the encoded files of one package, bound to its animation.json by sha256, with per-transport results and the thresholds used.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": ["schema", "manifestSha256", "transports"],
@@ -800,7 +802,7 @@
       }
     },
     "validation_report_v1": {
-      "description": "validate_animation.py --report: a QA envelope with one check per rule and package; a report whose status is fail makes the tool exit 1 (per D26).",
+      "description": "comfyui_forge_validate_animation.py --report: a QA envelope with one check per rule and package; a report whose status is fail makes the tool exit 1 (per D26).",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": ["schema"],

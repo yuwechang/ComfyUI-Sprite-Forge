@@ -2,26 +2,26 @@
 
 Run every command from your project root as `python "<skill-dir>/scripts/<tool>.py" ...`, where `<skill-dir>` is this skill's folder (`${CLAUDE_SKILL_DIR}` in Claude Code). Write outputs to a **new** folder inside your project, never inside the skill folder. The tools need Python 3.10+, numpy and Pillow 10.1 or newer; scipy only speeds up component labelling.
 
-`process` is for generated or painted sheets that still need keying, cell splitting and registration. Code art never goes through `process`: codeart2d frames are already on their pixel grid and go straight to `build_animation_clips.py`. Packaging registered frames (`build_animation_clips.py`) and complete rectangular frames (`assemble_frames.py`) is described in [frames-and-clips.md](frames-and-clips.md). Before `process`, run `sheet_qc.py spill` on a raw sheet; for one scale and whole-pixel locks across an action, `scale_frames.py` replaces per-frame fitting ([prompt-rules.md](prompt-rules.md) lists the check order).
+`process` is for generated or painted sheets that still need keying, cell splitting and registration. Code art never goes through `process`: codeart2d frames are already on their pixel grid and go straight to `comfyui_forge_build_animation_clips.py`. Packaging registered frames (`comfyui_forge_build_animation_clips.py`) and complete rectangular frames (`comfyui_forge_assemble_frames.py`) is described in [frames-and-clips.md](frames-and-clips.md). Before `process`, run `comfyui_forge_sheet_qc.py spill` on a raw sheet; for one scale and whole-pixel locks across an action, `comfyui_forge_scale_frames.py` replaces per-frame fitting ([prompt-rules.md](prompt-rules.md) lists the check order).
 
 ## Normalize a generated sheet
 
 Smooth art from a host image tool, native transparency, one shared scale, feet on one ground line:
 
 ```bash
-python "<skill-dir>/scripts/generate2dsprite.py" process --input raw/hero-idle.png --target asset --mode idle --rows 2 --cols 3 --label-prefix hero-idle --output-dir sprites/hero-idle --background-mode native_alpha --align feet --scale-strategy preserve --cell-size 128 --fit-scale 0.8 --strict-qc --max-body-scale-cv 0.08 --max-anchor-y-std 0.05 --write-scale-profile sprites/hero-scale.json
+python "<skill-dir>/scripts/comfyui_forge_generate2dsprite.py" process --input raw/hero-idle.png --target asset --mode idle --rows 2 --cols 3 --label-prefix hero-idle --output-dir sprites/hero-idle --background-mode native_alpha --align feet --scale-strategy preserve --cell-size 128 --fit-scale 0.8 --strict-qc --max-body-scale-cv 0.08 --max-anchor-y-std 0.05 --write-scale-profile sprites/hero-scale.json
 ```
 
 Later actions of the same character reuse that scale profile; pass the drift limit explicitly (a profile stores 0.10 unless you set it):
 
 ```bash
-python "<skill-dir>/scripts/generate2dsprite.py" process --input raw/hero-run.png --target asset --mode run --rows 2 --cols 4 --output-dir sprites/hero-run --scale-profile sprites/hero-scale.json --max-profile-scale-drift 0.08 --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_generate2dsprite.py" process --input raw/hero-run.png --target asset --mode run --rows 2 --cols 4 --output-dir sprites/hero-run --scale-profile sprites/hero-scale.json --max-profile-scale-drift 0.08 --strict-qc
 ```
 
 Pixel art that the generator drew at 8 source pixels per art pixel, keeping its drawn bob and jump:
 
 ```bash
-python "<skill-dir>/scripts/generate2dsprite.py" process --input raw/slime-hop.png --target asset --mode idle --rows 2 --cols 2 --output-dir sprites/slime-hop --background-mode native_alpha --resampler nearest --logical-pixel 8 --pixel-scale 2 --scale-strategy registered --align feet --cell-size 96 --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_generate2dsprite.py" process --input raw/slime-hop.png --target asset --mode idle --rows 2 --cols 2 --output-dir sprites/slime-hop --background-mode native_alpha --resampler nearest --logical-pixel 8 --pixel-scale 2 --scale-strategy registered --align feet --cell-size 96 --strict-qc
 ```
 
 - `--target` and `--mode` must match (`list-options` prints the pairs). An unknown mode fails; `--mode sheet` needs `--rows` and `--cols`. `single`, `player` and `npc` modes normalize one image into `clean.png` and run through the same 1x1-grid geometry and QC as a sheet (`--single-size`, default 256 px).
@@ -35,7 +35,7 @@ Host image tools often leave invisible haze: the 2026-10 fox sheet had 67,907 pi
 python -c "import numpy as np; from PIL import Image; a = np.asarray(Image.open('raw/hero-idle.png').convert('RGBA'))[..., 3]; print(np.histogram(a, [0, 1, 5, 17, 32, 255, 256])[0])"
 ```
 
-`native_alpha` input gets `--alpha-hygiene both` by default: alpha at or below `--alpha-floor` (4) becomes 0 and faint islands with no solid pixel (alpha 32 or more) within 2 px are removed. The counts are in `pipeline-meta.json` under `hygiene`. Visible art is never changed by hygiene; `--alpha-hygiene none` keeps every pixel. A `faint_specks` warning from `sheet_qc.py spill` counts this same haze; `--alpha-hygiene both` is its fix.
+`native_alpha` input gets `--alpha-hygiene both` by default: alpha at or below `--alpha-floor` (4) becomes 0 and faint islands with no solid pixel (alpha 32 or more) within 2 px are removed. The counts are in `pipeline-meta.json` under `hygiene`. Visible art is never changed by hygiene; `--alpha-hygiene none` keeps every pixel. A `faint_specks` warning from `comfyui_forge_sheet_qc.py spill` counts this same haze; `--alpha-hygiene both` is its fix.
 
 ## Background modes and keying
 
@@ -46,7 +46,7 @@ python -c "import numpy as np; from PIL import Image; a = np.asarray(Image.open(
   - Quote the `matte.qa` numbers of `pipeline-meta.json` (opaque key pixels, ring spill share, semi-transparent share, enclosed pockets) when you claim a clean key. After a despill, `matte.qa_after_despill` measures the published sheet again.
   - The `qa` envelope warns with `key_residue` (opaque key-coloured pixels) and `key_ring_spill` (more than 1% of the outer edge ring still key-coloured, the video residue gate). The binary key leaves that fringe on anti-aliased edges; `--despill-radius 1` or `--key-quality soft` clears it. Both are warnings: `--strict-qc` does not fail on them.
 - `native_alpha` needs real transparent pixels plus visible art and keeps RGBA as delivered, including purple. A painted checkerboard is refused.
-- `opaque` needs fully opaque input and only works for single images. A grid of opaque cells is refused: package complete rectangular frames with `assemble_frames.py` instead.
+- `opaque` needs fully opaque input and only works for single images. A grid of opaque cells is refused: package complete rectangular frames with `comfyui_forge_assemble_frames.py` instead.
 
 ## Geometry v2
 
@@ -116,13 +116,13 @@ PNGs are the alpha source of truth. GIF previews have binary alpha and store fra
 Repeat an accepted character into a fixed template that a generator can trace for every pose (same scale, same feet line). It keeps native RGBA, or produces a magenta RGB template from a chroma source:
 
 ```bash
-python "<skill-dir>/scripts/make_anchor_layout.py" --input accepted/hero-master.png --rows 2 --cols 4 --cell-width 384 --cell-height 384 --feet-ratio 0.82 --background-mode native_alpha --resampler nearest --output guides/hero-anchor-2x4.png
+python "<skill-dir>/scripts/comfyui_forge_make_anchor_layout.py" --input accepted/hero-master.png --rows 2 --cols 4 --cell-width 384 --cell-height 384 --feet-ratio 0.82 --background-mode native_alpha --resampler nearest --output guides/hero-anchor-2x4.png
 ```
 
 Draw an empty layout guide with safe frames; each margin must be at least 0 and less than half the cell:
 
 ```bash
-python "<skill-dir>/scripts/make_layout_guide.py" --rows 2 --cols 4 --cell-width 384 --cell-height 384 --safe-margin-x 58 --safe-margin-y 58 --output guides/layout-2x4.png
+python "<skill-dir>/scripts/comfyui_forge_make_layout_guide.py" --rows 2 --cols 4 --cell-width 384 --cell-height 384 --safe-margin-x 58 --safe-margin-y 58 --output guides/layout-2x4.png
 ```
 
 Both refuse an existing output file. Measure the sheet that comes back: when it keeps the template's cell size, its poses share the template's feet point, so process it with `--scale-strategy registered` (or `--anchor-px` at cell width / 2, cell height x feet ratio).
@@ -132,7 +132,7 @@ Both refuse an existing output file. Measure the sheet that comes back: when it 
 `process --godot-world-height 0.70` writes `godot-sprite3d.json` with a pixel size derived from the visible subject height, the feet origin converted to a Sprite3D offset, frame paths relative to the contract file and the timing. Later actions using the reference profile reuse that pixel size and world height, preserving legitimate crouching and recoil.
 
 ```bash
-python "<skill-dir>/scripts/generate2dsprite.py" build-godot-bundle --action idle=sprites/hero-idle/godot-sprite3d.json --action attack=sprites/hero-attack/godot-sprite3d.json --default-action idle --one-shot attack --output sprites/hero-godot-bundle.json
+python "<skill-dir>/scripts/comfyui_forge_generate2dsprite.py" build-godot-bundle --action idle=sprites/hero-idle/godot-sprite3d.json --action attack=sprites/hero-attack/godot-sprite3d.json --default-action idle --one-shot attack --output sprites/hero-godot-bundle.json
 ```
 
 The bundle refuses an existing file, contracts whose frames do not resolve and incompatible world height or pixel size. Do not compensate a wrong action scale with per-action runtime magnification. Other engines can consume the PNGs and the declared origin directly.

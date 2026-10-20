@@ -9,7 +9,7 @@ How a game should play the clips that [frames-and-clips.md](frames-and-clips.md)
 - **Pose and contact landmarks:** per-frame notes such as a planted toe, the pelvis or the head. They help review gait and foot slide; they are not runtime anchors.
 - **Collider:** authored game geometry. Never replace it every frame with the art's alpha bounds.
 
-`generate2dsprite.py process` alignment translates each detected subject. That repairs genuinely grounded poses but erases intentional run flight, breathing bob, recoil and jumps. For registered animation, keep fixed cells and apply at most one common crop, padding or scale to the whole set. Keying and alpha clean-up must keep each cell's coordinate system.
+`comfyui_forge_generate2dsprite.py process` alignment translates each detected subject. That repairs genuinely grounded poses but erases intentional run flight, breathing bob, recoil and jumps. For registered animation, keep fixed cells and apply at most one common crop, padding or scale to the whole set. Keying and alpha clean-up must keep each cell's coordinate system.
 
 Source coordinates stay the truth. If the root is `R` and a trim or crop starts at `C` in the same source coordinates, the trimmed frame's root is `R - C`; never replace it with the trimmed bottom centre. Scale both together when a scale `s` is applied. A preview or mobile encode can be smaller than the source, but `anchor_px` and the frame size still describe the source pixels that world geometry uses.
 
@@ -76,7 +76,7 @@ Record the actual render intervals and pose indices for a short representative r
 
 Inspect state boundaries as well as loops. Rank large adjacent-frame changes, including last to first, to find review candidates, but never use pixel-difference scores, hash counts or frame counts as a quality score. Check head and costume drift separately from intended limb motion. If one transition is bad, repair the poses involved, or add controlled in-betweens, while keeping the accepted frames and registration. Generating ever larger atlases multiplies identity errors.
 
-For constant-rate frame sequences, the video skill's [animation review helper](../../comfyui-forge-video2dsprite/scripts/animation_review.py) builds light and dark previews, frame-step views and interval selection; give it the real source rate. For variable durations, use the clip builder's previews.
+For constant-rate frame sequences, the video skill's [animation review helper](../../comfyui-forge-video2dsprite/scripts/comfyui_forge_animation_review.py) builds light and dark previews, frame-step views and interval selection; give it the real source rate. For variable durations, use the clip builder's previews.
 
 ## Engine and editor notes
 

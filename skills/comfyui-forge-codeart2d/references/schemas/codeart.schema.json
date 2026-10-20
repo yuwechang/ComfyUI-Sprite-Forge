@@ -164,7 +164,7 @@
       }
     },
     "rig_anim_v1": {
-      "description": "Rig animation (roadmap 4.8) for rig_animate.py: clips that pose the bones of an SVG rig (bones are <g id data-pivot>, slots carry data-z). states maps state names to clips; entry_reference names the clip whose first pose is the rest pose for entry frames; pixel sets the pixel route's ramps (five colours, or hi/mid/lo/dark/out with mid required), light direction, inner lines and outline.",
+      "description": "Rig animation (roadmap 4.8) for comfyui_forge_rig_animate.py: clips that pose the bones of an SVG rig (bones are <g id data-pivot>, slots carry data-z). states maps state names to clips; entry_reference names the clip whose first pose is the rest pose for entry frames; pixel sets the pixel route's ramps (five colours, or hi/mid/lo/dark/out with mid required), light direction, inner lines and outline.",
       "type": "object",
       "required": ["schema", "rig", "clips"],
       "properties": {
@@ -204,7 +204,7 @@
       }
     },
     "fx_v1": {
-      "description": "Gameplay-timed effects for fx_build.py and the fx.v1 runtime: a runtime spawns an effect at hitAt - impactMs. seeds make particles deterministic. canvas and origin place the effects; frameMs sets the frame grid an effect is rendered on, outline names its outline colour and events are its own timed events. The six fx_build presets (slash, sparks, ring, flash, dust, projectile) are closed: fx_build refuses unknown parameters. Other primitive types stay open for hand-written runtimes.",
+      "description": "Gameplay-timed effects for comfyui_forge_fx_build.py and the fx.v1 runtime: a runtime spawns an effect at hitAt - impactMs. seeds make particles deterministic. canvas and origin place the effects; frameMs sets the frame grid an effect is rendered on, outline names its outline colour and events are its own timed events. The six fx_build presets (slash, sparks, ring, flash, dust, projectile) are closed: fx_build refuses unknown parameters. Other primitive types stay open for hand-written runtimes.",
       "type": "object",
       "required": ["schema", "effects", "palette"],
       "properties": {
@@ -268,7 +268,7 @@
       }
     },
     "codeart_meta_v1": {
-      "description": "codeart-meta.json beside every codeart2d output. art_source is always code (disclose it as code-drawn, no image model; codeart_core writes that text in disclosure); spec_sha256 binds the outputs to the exact text spec; qa is a QA envelope over the outputs (codeart_core wraps qa_pixels metrics in one). renderer names the tool and version, and for SVG art the codeart_core.rasterize info: backend, engine, zoom and output size. palette is usually {colors, variants} as codeart_core.write_codeart_meta writes it: base colours by name and named variants that override some of them. placeholder is true for stand-in art (layout_build records it honestly). Tool details: pixelspec (render_pixelspec.py: the spec's name, schema id, canvas, anchor_px and outline mode; variants {label: folder}; frames [{index, name, file or null, empty?, reuses?}]; clips {manifest_schema, manifests, bundles, per_clip}; preview {file, scale, layout}), svg (svg_render.py render: mode vector or crisp, lint profile, zoom, canvas, anchor_px, palette_source, variants, images), route with rig and anim (rig_animate.py) or spec (fx_build.py) as fileRefs, renderer.route and for the pixel route renderer.coverage_ss, coverage and finish, and params and tilesets (autotile_build.py).",
+      "description": "codeart-meta.json beside every codeart2d output. art_source is always code (disclose it as code-drawn, no image model; codeart_core writes that text in disclosure); spec_sha256 binds the outputs to the exact text spec; qa is a QA envelope over the outputs (codeart_core wraps qa_pixels metrics in one). renderer names the tool and version, and for SVG art the codeart_core.rasterize info: backend, engine, zoom and output size. palette is usually {colors, variants} as codeart_core.write_codeart_meta writes it: base colours by name and named variants that override some of them. placeholder is true for stand-in art (layout_build records it honestly). Tool details: pixelspec (comfyui_forge_render_pixelspec.py: the spec's name, schema id, canvas, anchor_px and outline mode; variants {label: folder}; frames [{index, name, file or null, empty?, reuses?}]; clips {manifest_schema, manifests, bundles, per_clip}; preview {file, scale, layout}), svg (comfyui_forge_svg_render.py render: mode vector or crisp, lint profile, zoom, canvas, anchor_px, palette_source, variants, images), route with rig and anim (comfyui_forge_rig_animate.py) or spec (comfyui_forge_fx_build.py) as fileRefs, renderer.route and for the pixel route renderer.coverage_ss, coverage and finish, and params and tilesets (comfyui_forge_autotile_build.py).",
       "type": "object",
       "required": ["schema", "art_source", "generator", "spec_sha256", "renderer", "palette", "outputs", "qa"],
       "properties": {
@@ -306,8 +306,8 @@
         },
         "outputs": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/fileRef"}},
         "qa": {"$ref": "common.schema.json#/$defs/qaEnvelope"},
-        "pixelspec": {"description": "render_pixelspec.py details.", "type": "object"},
-        "svg": {"description": "svg_render.py render details.", "type": "object"},
+        "pixelspec": {"description": "comfyui_forge_render_pixelspec.py details.", "type": "object"},
+        "svg": {"description": "comfyui_forge_svg_render.py render details.", "type": "object"},
         "route": {"enum": ["pixel", "vector"]},
         "rig": {"$ref": "common.schema.json#/$defs/fileRef"},
         "anim": {"$ref": "common.schema.json#/$defs/fileRef"},
@@ -317,7 +317,7 @@
       }
     },
     "material_spec_v1": {
-      "description": "Materials for autotile_build.py: colour ramps (dark to light) per material, the tile sets to build (wang_corner takes two or three materials, blob47 exactly two, bevel and flat one), interior-only variants and a fixed seed. A material may be walkable or not (tileset collision at collision_cell resolution), carry edge and shadow bands (materialBandRule), bevel offsets per side and a texture: a base ramp position, periodic noise levels [threshold, amplitude, ramp position], marks of ramp positions ('.' or space is empty) with weights and a count per tile, or an image. A set may carry its id, plateau, wobble and margin.",
+      "description": "Materials for comfyui_forge_autotile_build.py: colour ramps (dark to light) per material, the tile sets to build (wang_corner takes two or three materials, blob47 exactly two, bevel and flat one), interior-only variants and a fixed seed. A material may be walkable or not (tileset collision at collision_cell resolution), carry edge and shadow bands (materialBandRule), bevel offsets per side and a texture: a base ramp position, periodic noise levels [threshold, amplitude, ramp position], marks of ramp positions ('.' or space is empty) with weights and a count per tile, or an image. A set may carry its id, plateau, wobble and margin.",
       "type": "object",
       "required": ["schema", "tile_size", "materials", "sets", "seed"],
       "properties": {
@@ -418,7 +418,7 @@
       }
     },
     "doctor_report_v1": {
-      "description": "svg_render.py doctor --report: codeart_core.run_doctor output (cases, backends, primary, lint, hint?) extended into a common QA envelope, plus the platform. status is pass only when the primary backend passes every case and the portable lint rejects every lint case; deviations of fallback backends are warn checks. The report names its contract in schema (codeart2d.doctor_report.v1), which svg_render always writes.",
+      "description": "comfyui_forge_svg_render.py doctor --report: codeart_core.run_doctor output (cases, backends, primary, lint, hint?) extended into a common QA envelope, plus the platform. status is pass only when the primary backend passes every case and the portable lint rejects every lint case; deviations of fallback backends are warn checks. The report names its contract in schema (codeart2d.doctor_report.v1), which svg_render always writes.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": ["schema", "primary", "cases", "backends", "lint"],
@@ -481,7 +481,7 @@
       "oneOf": [{"required": ["target"]}, {"required": ["gait"]}]
     },
     "rig_report_v1": {
-      "description": "rig-report.json written by rig_animate.py: per-clip frame records (QA metrics, ground edge, margin, IK contacts), seam reports, planted-foot drift, entry frame, stride and events, all in output pixels; qa is the envelope of codeart-meta.json.",
+      "description": "rig-report.json written by comfyui_forge_rig_animate.py: per-clip frame records (QA metrics, ground edge, margin, IK contacts), seam reports, planted-foot drift, entry frame, stride and events, all in output pixels; qa is the envelope of codeart-meta.json.",
       "type": "object",
       "required": ["schema", "route", "frame_size", "anchor_px", "clips", "qa"],
       "properties": {
@@ -523,7 +523,7 @@
       }
     },
     "fx_slash": {
-      "description": "fx_build.py slash preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
+      "description": "comfyui_forge_fx_build.py slash preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
       "type": "object",
       "required": ["type"],
       "properties": {
@@ -544,7 +544,7 @@
       "additionalProperties": false
     },
     "fx_sparks": {
-      "description": "fx_build.py sparks preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
+      "description": "comfyui_forge_fx_build.py sparks preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
       "type": "object",
       "required": ["type"],
       "properties": {
@@ -565,7 +565,7 @@
       "additionalProperties": false
     },
     "fx_ring": {
-      "description": "fx_build.py ring preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
+      "description": "comfyui_forge_fx_build.py ring preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
       "type": "object",
       "required": ["type"],
       "properties": {
@@ -582,7 +582,7 @@
       "additionalProperties": false
     },
     "fx_flash": {
-      "description": "fx_build.py flash preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
+      "description": "comfyui_forge_fx_build.py flash preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
       "type": "object",
       "required": ["type"],
       "properties": {
@@ -600,7 +600,7 @@
       "additionalProperties": false
     },
     "fx_dust": {
-      "description": "fx_build.py dust preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
+      "description": "comfyui_forge_fx_build.py dust preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
       "type": "object",
       "required": ["type"],
       "properties": {
@@ -619,7 +619,7 @@
       "additionalProperties": false
     },
     "fx_projectile": {
-      "description": "fx_build.py projectile preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
+      "description": "comfyui_forge_fx_build.py projectile preset (closed: fx_build refuses unknown parameters). ramp names a ramp of the spec, colors list palette colours; impact as a time means the effect's impactMs.",
       "type": "object",
       "required": ["type"],
       "properties": {
@@ -636,7 +636,7 @@
       "additionalProperties": false
     },
     "fx_report_v1": {
-      "description": "fx-report.json written by fx_build.py: per effect the frames (start, duration and sample ms, QA metrics, margin), durations, hit frame, dropped tail frames, events and loop seam; slash arc progress per frame; the build and runtime records; qa is the envelope of codeart-meta.json. fx-verify.json is a common qaEnvelope plus effects and findings.",
+      "description": "fx-report.json written by comfyui_forge_fx_build.py: per effect the frames (start, duration and sample ms, QA metrics, margin), durations, hit frame, dropped tail frames, events and loop seam; slash arc progress per frame; the build and runtime records; qa is the envelope of codeart-meta.json. fx-verify.json is a common qaEnvelope plus effects and findings.",
       "type": "object",
       "required": ["schema", "route", "canvas", "origin", "effects", "qa"],
       "properties": {
@@ -686,7 +686,7 @@
       }
     },
     "layout_spec_v1": {
-      "description": "Input of layout_build.py. size is in tiles; terrain shapes use tile (vertex) coordinates and paint in order; objects, spawns, interactions, scatter regions and clearances are world pixels.",
+      "description": "Input of comfyui_forge_layout_build.py. size is in tiles; terrain shapes use tile (vertex) coordinates and paint in order; objects, spawns, interactions, scatter regions and clearances are world pixels.",
       "type": "object",
       "required": ["schema", "size", "materials"],
       "properties": {
@@ -832,7 +832,7 @@
       }
     },
     "parallax_spec_v1": {
-      "description": "Input of parallax_build.py: viewport and camera envelope as in parallax_plan, and layers back to front. Generated kinds (sky, ridge, clouds, foreground) are periodic in their period; image layers bring their own PNG.",
+      "description": "Input of comfyui_forge_parallax_build.py: viewport and camera envelope as in parallax_plan, and layers back to front. Generated kinds (sky, ridge, clouds, foreground) are periodic in their period; image layers bring their own PNG.",
       "type": "object",
       "required": ["schema", "viewport", "layers"],
       "properties": {
@@ -877,7 +877,7 @@
       }
     },
     "plate_effects_v1": {
-      "description": "Input of ambient_bake.py: effects in feathered polygons of a static plate. Every effect period must divide the loop period_ms (default: their least common multiple).",
+      "description": "Input of comfyui_forge_ambient_bake.py: effects in feathered polygons of a static plate. Every effect period must divide the loop period_ms (default: their least common multiple).",
       "type": "object",
       "required": ["schema", "effects"],
       "properties": {
@@ -923,7 +923,7 @@
       }
     },
     "ambient_loop_v1": {
-      "description": "ambient-loop.json from ambient_bake.py: a cycle loop of frame_count PNG frames lasting period_ms; durations_ms sum to period_ms; frame N would equal frame 0. art_source is code only when the plate itself is code art (plate_art_source records the plate's, motion_source the motion's).",
+      "description": "ambient-loop.json from comfyui_forge_ambient_bake.py: a cycle loop of frame_count PNG frames lasting period_ms; durations_ms sum to period_ms; frame N would equal frame 0. art_source is code only when the plate itself is code art (plate_art_source records the plate's, motion_source the motion's).",
       "type": "object",
       "required": [
         "schema",

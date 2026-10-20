@@ -22,13 +22,13 @@ Keep one shared clock for every animated layer and freeze it under reduced motio
 
 ## 2. Light cookie: tint and flicker
 
-    python "<skill-dir>/scripts/extract_scene_lights.py" extract --plate scene/plate.png --stage scene/stage.json --output-dir scene/lights-v1 --expect 3 --flicker 0.25:0.15
+    python "<skill-dir>/scripts/comfyui_forge_extract_scene_lights.py" extract --plate scene/plate.png --stage scene/stage.json --output-dir scene/lights-v1 --expect 3 --flicker 0.25:0.15
 
 `lights.json` lists each light as `u`, `v` (UV of the plate), `color` (the hue its glow adds, at full brightness), `radius` (a fraction of the plate width, `radiusUnit` says so), `strength` (peak contrast 0..1) and an optional `flicker` `{hz, depth, phase}`. `light-cookie.png` (512x288, opaque RGB: a tint texture with no alpha channel) maps the whole plate: the `ambient` colour everywhere, each light a smooth pool of its colour.
 
 The detector proposes candidates; it does not know what a lamp is. It finds peaks of local contrast and measures each against its own peak, so a lantern on a lit wall stays separate from the wall, and broad bright areas (a sunlit wall, a sky gap) are dropped. Peaks are examined strongest first until `--max-lights` lights are found: on detailed night paintings the strongest are mostly lamps, flames and lit windows, but rows of windows, wet-floor glints and water reflections also rank, and a lamp no brighter than its surroundings is missed. Give `--stage`: the plate contract keeps lamps off the walkable ground, so candidates centred on ground polygons or ripple water are rejected as reflections (`--keep-floor` keeps them). Use `--max-lights` near the number of lights you expect plus a few. Then curate: look at `lights-overlay.png`, delete false lights from `lights.json`, add missed ones (`u`, `v`, `color`, `radius`), and re-bake the cookie:
 
-    python "<skill-dir>/scripts/extract_scene_lights.py" cookie --lights scene/lights-v1/lights.json --plate scene/plate.png --output-dir scene/lights-v2
+    python "<skill-dir>/scripts/comfyui_forge_extract_scene_lights.py" cookie --lights scene/lights-v1/lights.json --plate scene/plate.png --output-dir scene/lights-v2
 
 Tint each actor once per frame by sampling the cookie at its foot (flip v for GL textures):
 
@@ -89,7 +89,7 @@ c += (hash(pixel, time) - 0.5) * 0.022;                                   // gra
 
 Motes are GPU points whose motion is a pure function of the shared clock (wander and blink, rise, fall and flutter, drift); `mobile` is the count used on phones. Mist is a slow noise layer over the ground (opacity 0.07-0.11); shafts are additive streaks (opacity 0.07-0.11), off on phones. Check the values and the mote budget:
 
-    python "<skill-dir>/scripts/extract_scene_lights.py" atmosphere --atmosphere scene/atmosphere.json --output-dir scene/atmosphere-qa-v1 --max-motes 512 --max-mobile-motes 160
+    python "<skill-dir>/scripts/comfyui_forge_extract_scene_lights.py" atmosphere --atmosphere scene/atmosphere.json --output-dir scene/atmosphere-qa-v1 --max-motes 512 --max-mobile-motes 160
 
 It fails on invalid values (opacity or vignette outside 0..1, bad colours, `mobile` above `count`) and warns on heavy mist (over 0.3) or shafts (over 0.25), bloom over 1, saturation outside 0.7..1.4, vignette over 0.6 and mote counts over the budgets.
 

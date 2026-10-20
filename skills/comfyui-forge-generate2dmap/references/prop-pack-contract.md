@@ -41,9 +41,9 @@ Use verified native transparency where the tool supports it. Otherwise choose a 
 ## Extraction
 
 ```bash
-python "<skill-dir>/scripts/extract_prop_pack.py" --input raw/forest-props.png --rows 2 --cols 2 --labels shrub,lantern,crate,stump --output-dir assets/props --reject-edge-touch
-python "<skill-dir>/scripts/extract_prop_pack.py" --input raw/meadow-props.png --rows 4 --cols 4 --grid-rounding nearest --labels-file raw/meadow-labels.txt --output-dir assets/meadow-props
-python "<skill-dir>/scripts/extract_prop_pack.py" --input raw/forest-props.png --auto-boxes --labels tree,lantern,rock --output-dir assets/forest-props --suggest-footprint ellipse
+python "<skill-dir>/scripts/comfyui_forge_extract_prop_pack.py" --input raw/forest-props.png --rows 2 --cols 2 --labels shrub,lantern,crate,stump --output-dir assets/props --reject-edge-touch
+python "<skill-dir>/scripts/comfyui_forge_extract_prop_pack.py" --input raw/meadow-props.png --rows 4 --cols 4 --grid-rounding nearest --labels-file raw/meadow-labels.txt --output-dir assets/meadow-props
+python "<skill-dir>/scripts/comfyui_forge_extract_prop_pack.py" --input raw/forest-props.png --auto-boxes --labels tree,lantern,rock --output-dir assets/forest-props --suggest-footprint ellipse
 ```
 
 - **Publication.** `--output-dir` must be new; an existing folder is refused, so old files can never mix with a new manifest. Work is staged beside it and published after QA; a failed run, including `--reject-edge-touch` and a run that accepts no prop (exit 1), leaves nothing behind. Outputs are `<output-dir>/<label>/prop.png` and `prop-pack.json`; `--manifest` may place the manifest elsewhere (a new file, removed again if publication fails).
@@ -63,7 +63,7 @@ A requested grid is not evidence of the returned cell boundaries. When objects a
 2. Review `auto-boxes.json`, fix or add boxes and per-prop fields, and rerun with `--boxes-file` to make the boxes explicit.
 
 ```bash
-python "<skill-dir>/scripts/extract_prop_pack.py" --input raw/forest-props.png --boxes-file raw/forest-boxes.json --component-mode all --alpha-hygiene both --output-dir assets/forest-props-reviewed --reject-edge-touch
+python "<skill-dir>/scripts/comfyui_forge_extract_prop_pack.py" --input raw/forest-props.png --boxes-file raw/forest-boxes.json --component-mode all --alpha-hygiene both --output-dir assets/forest-props-reviewed --reject-edge-touch
 ```
 
 ```json
@@ -86,7 +86,7 @@ Every accepted item records:
 - `component_count`, `kept_area`, `dropped_components`, `dropped_area`, `edge_touch`, and for chroma sheets `edge_fringe_px` (tinted pixels within 2 px of transparency).
 - Optional `footprint`, `solid`, `contact`, `occlusion_class`, `occupant_policy`, and `world_size`/`world_anchor` with `--world-scale`.
 
-The manifest also keeps the settings (despill, hygiene report, geometry, grid rounding) and a QA envelope: `accepted`, `edge_touch`, `dropped_area`, `strategy_aspect`, `edge_fringe` (warn above 2% of edge pixels) and, with auto boxes, `auto_box_unowned`, plus what the checks do not prove and the sha256 of every input and output. Same inputs give the same bytes. The cfed170 v1 keys (`source_box`, `crop_bbox`, `padded_crop_bbox`, `output_size`, ...) are still written, in cell coordinates. `extract_prop_pack.read_manifest()` reads v1 manifests as v2-shaped documents with a bottom-centre anchor (`anchor_source` `derived-v1`); `compose_layered_preview.py` reads v1 packs through it, so their props stand on the art's bottom edge. Compose finds a pack's manifest beside a prop image or one folder up (`<pack>/<label>/prop.png` with `<pack>/prop-pack.json`; `--prop-pack` names others), places the prop by its `anchor_px` and audits it with its `footprint` and `solid`; it refuses a manifest anchor whose image sha256 no longer matches.
+The manifest also keeps the settings (despill, hygiene report, geometry, grid rounding) and a QA envelope: `accepted`, `edge_touch`, `dropped_area`, `strategy_aspect`, `edge_fringe` (warn above 2% of edge pixels) and, with auto boxes, `auto_box_unowned`, plus what the checks do not prove and the sha256 of every input and output. Same inputs give the same bytes. The cfed170 v1 keys (`source_box`, `crop_bbox`, `padded_crop_bbox`, `output_size`, ...) are still written, in cell coordinates. `extract_prop_pack.read_manifest()` reads v1 manifests as v2-shaped documents with a bottom-centre anchor (`anchor_source` `derived-v1`); `comfyui_forge_compose_layered_preview.py` reads v1 packs through it, so their props stand on the art's bottom edge. Compose finds a pack's manifest beside a prop image or one folder up (`<pack>/<label>/prop.png` with `<pack>/prop-pack.json`; `--prop-pack` names others), places the prop by its `anchor_px` and audits it with its `footprint` and `solid`; it refuses a manifest anchor whose image sha256 no longer matches.
 
 ## Anchors, footprints and occlusion
 

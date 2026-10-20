@@ -55,12 +55,12 @@
 
 ## 工具與中斷處理
 
-1. `animation_spec.py`：計算／確認／保存規格；`--help`列出plan、save、show。
-2. `prepare_i2v_input.py prepare`：用確認的來源尺寸準備等比例角色、留白、key背景與registration_job；先觀看input.png。
-3. `route_media.py video --route comfyui`：用確認的來源秒數提交一次本機任務；fps來自匹配的工作流設定。
-4. `video2dsprite.py process`、`register_clip.py apply`：去背、解碼與定位，檢查亮暗底與漂移。
-5. `gait_loop.py`／`retime.py`：分析完整候選動作並依動作結構選格、安排重要姿勢與事件；不是平均切整段影片。若採往返微動，先整理完整播放順序，不能直接倒播跑步或有固定事件順序的動作。
-6. `finish_frames.py`：共同比例縮放到最終尺寸，準備剛好所需格數的播放序列。
-7. `deliver_animation.py`：不再縮放或選格，驗證尺寸／格數並輸出乾淨成品與ZIP。使用確認的設定檔，`--report`指向工作目錄。
+1. `comfyui_forge_animation_spec.py`：計算／確認／保存規格；`--help`列出plan、save、show。
+2. `comfyui_forge_prepare_i2v_input.py prepare`：用確認的來源尺寸準備等比例角色、留白、key背景與registration_job；先觀看input.png。
+3. `comfyui_forge_route_media.py video --route comfyui`：用確認的來源秒數提交一次本機任務；fps來自匹配的工作流設定。
+4. `comfyui_forge_video2dsprite.py process`、`comfyui_forge_register_clip.py apply`：去背、解碼與定位，檢查亮暗底與漂移。
+5. `comfyui_forge_gait_loop.py`／`comfyui_forge_retime.py`：分析完整候選動作並依動作結構選格、安排重要姿勢與事件；不是平均切整段影片。若採往返微動，先整理完整播放順序，不能直接倒播跑步或有固定事件順序的動作。
+6. `comfyui_forge_finish_frames.py`：共同比例縮放到最終尺寸，準備剛好所需格數的播放序列。
+7. `comfyui_forge_deliver_animation.py`：不再縮放或選格，驗證尺寸／格數並輸出乾淨成品與ZIP。使用確認的設定檔，`--report`指向工作目錄。
 
 pending：續取原生成資料夾，不重送。unknown：先看本機queue/history與job.json。done：校驗SHA256並重用影片。只改最終格數、時間、輸出格式時，優先使用已有影片，不為了驗證安裝重複生成。

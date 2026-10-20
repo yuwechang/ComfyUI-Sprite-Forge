@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'skills/comfyui-forge-generate2dmedia/scripts'))
-import route_media as route
-import comfyui_media as comfy
+import comfyui_forge_route_media as route
+import comfyui_forge_media as comfy
 
 class LocalOnlyTests(unittest.TestCase):
     def test_cloud_and_cli_routes_rejected(self):

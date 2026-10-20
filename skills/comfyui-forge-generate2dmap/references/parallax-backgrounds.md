@@ -77,7 +77,7 @@ The repeat period is the actual displayed source extent: export a crop you mean 
 ## 3. Validate
 
 ```bash
-python "<skill-dir>/scripts/validate_parallax.py" --spec stage/parallax-plan.json --report stage/qa/parallax-qa.json
+python "<skill-dir>/scripts/comfyui_forge_validate_parallax.py" --spec stage/parallax-plan.json --report stage/qa/parallax-qa.json
 ```
 
 It prints the full result as one line of ASCII JSON and exits 0 on pass, 1 on failure. `--report` saves the same result (schema `generate2dmap.parallax_validation.v2`) and never replaces an existing file; `--strict` saves nothing when the plan fails. It checks, per layer: real alpha against the declared `alpha`, unique ids, finite transforms, exactly one opaque sky, and canvas coverage at every camera x/y and zoom corner, reporting the gap in pixels on each side.
@@ -110,13 +110,13 @@ x0 = (W - windowW) * u        y0 = (H - windowH) * v
 The whole plate moves as one, so this suits battle, title and story backdrops rather than deep side-scrolling. Preview the pan on the composed scene (frames from `u = 0` to `1`, stacked, deterministic):
 
 ```bash
-python "<skill-dir>/scripts/compose_layered_preview.py" --base stage/plate.png --placements stage/placements.json --output stage/qa/preview.png --plate-pan stage/qa/plate-pan.png --pan-viewport 960x540 --pan-zoom 1.12 --pan-frames 5
+python "<skill-dir>/scripts/comfyui_forge_compose_layered_preview.py" --base stage/plate.png --placements stage/placements.json --output stage/qa/preview.png --plate-pan stage/qa/plate-pan.png --pan-viewport 960x540 --pan-zoom 1.12 --pan-frames 5
 ```
 
 Then check that the subjects survive both pan ends:
 
 ```bash
-python "<skill-dir>/scripts/conform_background.py" validate-crops --input stage/plate.png --zoom 1.12 --focus 0,0.5 --focus 1,0.5 --subject crest=600,200,680,280 --min-margin 8 --output-dir stage/qa/pan-crops
+python "<skill-dir>/scripts/comfyui_forge_conform_background.py" validate-crops --input stage/plate.png --zoom 1.12 --focus 0,0.5 --focus 1,0.5 --subject crest=600,200,680,280 --min-margin 8 --output-dir stage/qa/pan-crops
 ```
 
 ## 6. Aspect-safe backdrops
@@ -124,13 +124,13 @@ python "<skill-dir>/scripts/conform_background.py" validate-crops --input stage/
 Image tools return their own sizes (a 1280x720 request came back 1672x941). Conform the painting to the game's size with a recorded transform instead of an ad-hoc resize:
 
 ```bash
-python "<skill-dir>/scripts/conform_background.py" conform --input art/forest.png --size 1280x720 --mode cover --output-dir stage/bg-cover
+python "<skill-dir>/scripts/comfyui_forge_conform_background.py" conform --input art/forest.png --size 1280x720 --mode cover --output-dir stage/bg-cover
 ```
 
 `cover` takes the largest window of the target aspect (the same pixels as PIL `ImageOps.fit`, placed by `--focus`). When the painted ground must sit on the authored floor, use `ground-fit`: the smallest uniform zoom that maps the painted ground row (`--ground-y`, source pixels) onto the floor row (`--floor-y`, output pixels) with no padding:
 
 ```bash
-python "<skill-dir>/scripts/conform_background.py" conform --input art/forest.png --size 1280x720 --mode ground-fit --ground-y 718.7 --floor-y 610 --subject well=700,500,820,700 --aspects 16:9,19.5:9,4:3 --output-dir stage/bg-fit
+python "<skill-dir>/scripts/comfyui_forge_conform_background.py" conform --input art/forest.png --size 1280x720 --mode ground-fit --ground-y 718.7 --floor-y 610 --subject well=700,500,820,700 --aspects 16:9,19.5:9,4:3 --output-dir stage/bg-fit
 ```
 
 `conform.json` records `scale`, `src_rect` and the map `out = (src - src_rect[0:2]) * scale` (inverse `src = out / scale + src_rect[0:2]`); move placements authored on the old image through it rather than eyeballing. Subject boxes are mapped too and must stay inside the output and, with `--aspects`, inside each aspect's cover crop; `--strict` publishes nothing when one is cut, and without it the report is published with QA status fail and the run still exits 1 (as `validate-crops` does for a cut window). To keep a backdrop usable from 16:9 to 19.5:9, bake it with spare height (3:2 works) and choose a vertical focus that keeps crests and faces inside the 19.5:9 crop; prove it with `validate-crops` on the plate the game loads.

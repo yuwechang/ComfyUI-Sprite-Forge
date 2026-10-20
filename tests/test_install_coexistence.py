@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('fork_installer',ROOT/'tools/install_skills.py')
+spec=importlib.util.spec_from_file_location('fork_installer',ROOT/'tools/comfyui_forge_install_skills.py')
 installer=importlib.util.module_from_spec(spec);spec.loader.exec_module(installer)
 ORIGINAL=('codeart2d','generate2dmap','generate2dmedia','generate2dsprite','video2dsprite')
 
@@ -30,6 +30,19 @@ class CoexistenceTests(unittest.TestCase):
             self.assertTrue((dest/'.comfyui-sprite-forge.install.json').is_file())
             self.assertFalse(installer.drift(ROOT/'skills',dest,skills))
 
+    def test_core_update_archives_previously_managed_optional_skills(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base=Path(temp);dest=base/'skills'
+            all_skills=installer.source_skills(ROOT/'skills',['comfyui-forge-'+n for n in ORIGINAL])
+            installer.apply(ROOT/'skills',dest,all_skills,base/'first')
+            core=installer.source_skills(ROOT/'skills',None)
+            self.assertEqual(len(core),3)
+            installer.apply(ROOT/'skills',dest,core,base/'second')
+            for name in ('codeart2d','generate2dmap'):
+                self.assertFalse((dest/('comfyui-forge-'+name)).exists())
+                self.assertTrue((base/'second'/('comfyui-forge-'+name)/'SKILL.md').is_file())
+            self.assertFalse(installer.drift(ROOT/'skills',dest,core))
+
     def test_unnamespaced_source_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);(root/'video2dsprite').mkdir();(root/'video2dsprite/SKILL.md').write_text('x')
@@ -39,7 +52,7 @@ class CoexistenceTests(unittest.TestCase):
         for name in ORIGINAL:
             folder=ROOT/'skills'/('comfyui-forge-'+name)
             self.assertIn('name: comfyui-forge-'+name,(folder/'SKILL.md').read_text(encoding='utf-8'))
-        video=(ROOT/'skills/comfyui-forge-video2dsprite/scripts/sprite_set.py').read_text(encoding='utf-8')
+        video=(ROOT/'skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_sprite_set.py').read_text(encoding='utf-8')
         self.assertIn('"comfyui-forge-generate2dmedia"',video)
 
 if __name__=='__main__':unittest.main()

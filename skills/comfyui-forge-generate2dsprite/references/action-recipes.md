@@ -1,6 +1,6 @@
 # Action recipes
 
-Phase lists, grid shapes and project presets for sprite briefs. Combine them with [prompt-rules.md](prompt-rules.md) (prompt structure, NEAR/FAR limbs, palette and containment) and [character-animation.md](character-animation.md). Phase names are an animation brief, not proof that the model drew good motion: check every sheet with `sheet_qc.py` and look at the frames at game size.
+Phase lists, grid shapes and project presets for sprite briefs. Combine them with [prompt-rules.md](prompt-rules.md) (prompt structure, NEAR/FAR limbs, palette and containment) and [character-animation.md](character-animation.md). Phase names are an animation brief, not proof that the model drew good motion: check every sheet with `comfyui_forge_sheet_qc.py` and look at the frames at game size.
 
 ## Choosing the grid
 
@@ -79,7 +79,7 @@ Never pack unrelated actions into one raw sheet because the engine wants a 4x4 o
 
 ### Character anchor sheets
 
-For high-value grounded actions that keep drifting in scale or feet placement, accept a neutral master, repeat it into every cell with `make_anchor_layout.py`, attach both images and write:
+For high-value grounded actions that keep drifting in scale or feet placement, accept a neutral master, repeat it into every cell with `comfyui_forge_make_anchor_layout.py`, attach both images and write:
 
 ```text
 Image 1 is the exact character identity and art reference.
@@ -94,7 +94,7 @@ Do not use a grounded anchor sheet for jumps, falls, knockback, flying actors, p
 ### Layout guides: where they fit
 
 - Good fit: 3x3 and 4x4 prop packs, tile-like atlases, fixed atlas rows and 16-frame single actions (cast, summon, charge, death, transformation).
-- Possible fit: 3x3 large idles when earlier results drifted in scale, spacing or edge safety; run and walk sheets that kept crossing cells or repeating the leading leg (`plan_guide.py`, opt-in).
+- Possible fit: 3x3 large idles when earlier results drifted in scale, spacing or edge safety; run and walk sheets that kept crossing cells or repeating the leading leg (`comfyui_forge_plan_guide.py`, opt-in).
 - Risky fit: four-direction walk sheets, where guide pressure centres the poses and weakens the stride.
 
 ### Bundles
@@ -112,7 +112,7 @@ Write each asset's prompt on its own. Good splits: caster unit, projectile, impa
 
 ## Project presets
 
-Each preset is a starting brief for one kind of game. Copy it into the project's notes, then adjust the numbers to the real game. Canvases are logical game pixels; `render_scale` is how much larger the image model draws them. Timing is in 60 Hz game ticks (5 ticks = 83 ms, 12 ticks = 200 ms), the unit `scale_frames.py --emit-clips --ticks` writes, so every frame shows for a whole number of updates.
+Each preset is a starting brief for one kind of game. Copy it into the project's notes, then adjust the numbers to the real game. Canvases are logical game pixels; `render_scale` is how much larger the image model draws them. Timing is in 60 Hz game ticks (5 ticks = 83 ms, 12 ticks = 200 ms), the unit `comfyui_forge_scale_frames.py --emit-clips --ticks` writes, so every frame shows for a whole number of updates.
 
 ```yaml
 jrpg_walker:
@@ -129,10 +129,10 @@ jrpg_walker:
     walk: {grid: 4x4, rows: "down, left, right, up", columns: "neutral, step, neutral, step", side_rows: "NEAR foot forward, then FAR foot forward", ticks: 7, loop: true}
     idle: {grid: 2x2, ticks: 12, loop: true}
   pipeline:
-    - "sheet_qc.py spill --rows 4 --cols 4"
-    - "sheet_qc.py frames on each direction row (--frames-per-row 4)"
-    - "scale_frames.py --scale-from 1/8 --resampler nearest --anchor feet --row-baseline --emit-clips --ticks 7"
-    - "build_animation_clips.py"
+    - "comfyui_forge_sheet_qc.py spill --rows 4 --cols 4"
+    - "comfyui_forge_sheet_qc.py frames on each direction row (--frames-per-row 4)"
+    - "comfyui_forge_scale_frames.py --scale-from 1/8 --resampler nearest --anchor feet --row-baseline --emit-clips --ticks 7"
+    - "comfyui_forge_build_animation_clips.py"
   checks: [no part crosses a cell line, one scale for every direction, head ratio within 5 percent]
 ```
 
@@ -152,11 +152,11 @@ platform_hero:
     jump: {grid: 1x4, phases: [rise, apex, fall, land], loop: false, registration: "shared source root; no feet lock"}
     attack: {grid: 2x3, phases: [anticipation, wind-up, strike, follow-through, recovery, ready], body_only: true, loop: false}
   pipeline:
-    - "plan_guide.py --frames 8 --cycle run (opt-in, when sheets keep crossing cells)"
-    - "sheet_qc.py spill, then sheet_qc.py frames --cycle run --game-pixel 8"
-    - "scale_frames.py --scale-from 1/8 --resampler nearest --root-lock torso-x --row-baseline --emit-clips --ticks 5"
+    - "comfyui_forge_plan_guide.py --frames 8 --cycle run (opt-in, when sheets keep crossing cells)"
+    - "comfyui_forge_sheet_qc.py spill, then comfyui_forge_sheet_qc.py frames --cycle run --game-pixel 8"
+    - "comfyui_forge_scale_frames.py --scale-from 1/8 --resampler nearest --root-lock torso-x --row-baseline --emit-clips --ticks 5"
     - "later actions reuse the run's scale-frames.json with --profile and grow the canvas with --action-padding"
-    - "build_animation_clips.py"
+    - "comfyui_forge_build_animation_clips.py"
   checks: [leading leg alternates, torso drift under 2 game px, attack body within 10 percent of idle size]
 ```
 
@@ -177,9 +177,9 @@ iso_tactics_unit:
     hit: {grid: 2x2, phases: [impact, recoil, stagger, recovery], loop: false}
   pipeline:
     - "turnaround master in the four diagonal facings first"
-    - "sheet_qc.py spill per action sheet"
-    - "scale_frames.py --scale-from 1/8 --resampler nearest --anchor feet --lock feet (grounded actions)"
-    - "build_animation_clips.py"
+    - "comfyui_forge_sheet_qc.py spill per action sheet"
+    - "comfyui_forge_scale_frames.py --scale-from 1/8 --resampler nearest --anchor feet --lock feet (grounded actions)"
+    - "comfyui_forge_build_animation_clips.py"
   checks: [root on the diamond centre in every frame, same light direction in every facing]
 ```
 
@@ -197,8 +197,8 @@ td_tower:
     shoot: {grid: 2x2, phases: [ready, recoil, fire peak, settle], body_only: true, effects: "projectile and muzzle flash as separate fx sheets", loop: false}
     upgrades: {grid: 1x3, phases: [level 1, level 2, level 3], rule: "same base footprint, root and palette; only the top grows"}
   pipeline:
-    - "sheet_qc.py spill per sheet"
-    - "scale_frames.py --scale-from 1/8 --resampler nearest --anchor bbox --lock feet"
-    - "build_animation_clips.py"
+    - "comfyui_forge_sheet_qc.py spill per sheet"
+    - "comfyui_forge_scale_frames.py --scale-from 1/8 --resampler nearest --anchor bbox --lock feet"
+    - "comfyui_forge_build_animation_clips.py"
   checks: [base footprint identical across levels, effects never baked into the tower body]
 ```

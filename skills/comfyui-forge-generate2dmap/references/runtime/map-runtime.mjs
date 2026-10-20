@@ -3,7 +3,7 @@
  * for generate2dmap scenes (map_bundle.v2).
  *
  * One dependency-free ES module for browsers, Node 18+ and bundlers. Games can
- * import it as it is; build_scene_preview.py inlines it verbatim into
+ * import it as it is; comfyui_forge_build_scene_preview.py inlines it verbatim into
  * preview.html. It reads the bundle fields it needs (world, collision,
  * objects, props, portals, spawns, interactions, anchors, and whether there
  * are tiles layers or a material_map) and never touches the DOM, the network,
@@ -14,15 +14,15 @@
  * (a TypeError, never a silent drop, D2):
  *   - the per-tile collision (N7) of every tiles layer: options.tileSolids, or
  *     the same solids already in collision.solids with collision.tilesResolved
- *     set to true (build_scene_preview.py does this);
+ *     set to true (comfyui_forge_build_scene_preview.py does this);
  *   - the material map (N8): options.materialGrid, unless
  *     options.ignoreMaterialMap is true.
- * map_nav.py check writes both, read by forge_nav, into nav-grid.json as
+ * comfyui_forge_map_nav.py check writes both, read by forge_nav, into nav-grid.json as
  * runtimeInputs {tileSolids, materialGrid}: pass that object as the options,
  * createMapRuntime(bundle, navGrid.runtimeInputs).
  *
- * COLLISION mirrors forge_nav (shared/forge_nav.py, vendored as
- * scripts/forge_nav.py) rule for rule: the rule book N1-N15 in its docstring
+ * COLLISION mirrors forge_nav (shared/comfyui_forge_nav.py, vendored as
+ * scripts/comfyui_forge_nav.py) rule for rule: the rule book N1-N15 in its docstring
  * (integration decisions D1-D7) is the specification, and every formula
  * below keeps its operation order, so the answers are bit-identical except
  * for the sine and cosine of a rotation (V8 and a C runtime can differ by one
@@ -368,7 +368,7 @@ function propsRegistry(bundle) {
     plainObject(entry, where);
     if (entry.pack !== undefined) {
       throw new TypeError(`${where} names a prop pack (pack + label); resolve it into an inline item first `
-        + "(build_scene_preview.py does)");
+        + "(comfyui_forge_build_scene_preview.py does)");
     }
     if (entry.solid !== undefined && entry.solid !== null) flag(entry.solid, `${where}.solid`);
     found.set(name, entry);
@@ -559,7 +559,7 @@ function bitPlane(value, count, where) {
 /**
  * Decode a material grid: {width, height, cellWidth, cellHeight, bits, oneWay?}. bits (base64 or
  * Uint8Array, bit k LSB first for pixel k = j * width + i) marks BLOCK pixels, the optional oneWay plane
- * ONE_WAY pixels; build_scene_preview.py writes this form. Pixels are squares of a whole number of world
+ * ONE_WAY pixels; comfyui_forge_build_scene_preview.py writes this form. Pixels are squares of a whole number of world
  * px (N8): cellWidth must equal cellHeight. Returns {width, height, scale, codes, hasOneWay}.
  */
 export function decodeMaterialGrid(grid) {
@@ -616,7 +616,7 @@ function bitsOf(mask) {
  * The material grid of decoded straight-alpha RGBA pixels (a canvas getImageData result, for example)
  * by exact colour (N8): alpha 0 is no material; any other pixel must match exactly one material colour.
  * Materials given by palette `index` need the indices, which RGBA has lost: use the grid that
- * build_scene_preview.py embeds instead.
+ * comfyui_forge_build_scene_preview.py embeds instead.
  */
 export function materialGridFromRGBA(rgba, width, height, materialMap, worldWidth, worldHeight) {
   const materials = materialMap && materialMap.materials;
@@ -670,13 +670,13 @@ function resolvedInputs(bundle, collision, options) {
   const marked = collision.tilesResolved === undefined ? false : flag(collision.tilesResolved, "collision.tilesResolved");
   if (tiles !== undefined && given === null && !marked) {
     throw new TypeError(`layer ${JSON.stringify(String(tiles.name))} is a tiles layer, but its tile collision (N7) is not `
-      + "resolved: pass options.tileSolids (map_nav.py check writes them into nav-grid.json as runtimeInputs), or add "
+      + "resolved: pass options.tileSolids (comfyui_forge_map_nav.py check writes them into nav-grid.json as runtimeInputs), or add "
       + "them to collision.solids and set collision.tilesResolved to true");
   }
   const ignore = options.ignoreMaterialMap === undefined ? false : flag(options.ignoreMaterialMap, "options.ignoreMaterialMap");
   const grid = options.materialGrid === undefined || options.materialGrid === null ? null : options.materialGrid;
   if (bundle.material_map !== undefined && bundle.material_map !== null && grid === null && !ignore) {
-    throw new TypeError("material_map (N8) needs options.materialGrid: map_nav.py check writes it into nav-grid.json "
+    throw new TypeError("material_map (N8) needs options.materialGrid: comfyui_forge_map_nav.py check writes it into nav-grid.json "
       + "(runtimeInputs) and materialGridFromRGBA decodes a colour image; pass options.ignoreMaterialMap: true to walk "
       + "without it");
   }
@@ -771,7 +771,7 @@ export function footprintOffsets(radius, ySquash = 1) {
  * tiles layer needs them, unless collision.tilesResolved says collision.solids already holds them.
  * options.materialGrid is the material grid of material_map (see decodeMaterialGrid and
  * materialGridFromRGBA); a bundle with a material_map needs it, unless options.ignoreMaterialMap is true.
- * map_nav.py check writes both into nav-grid.json as runtimeInputs. Throws TypeError or RangeError on
+ * comfyui_forge_map_nav.py check writes both into nav-grid.json as runtimeInputs. Throws TypeError or RangeError on
  * malformed data or a missing resolved input, as forge_nav raises NavError.
  */
 export function createMapRuntime(bundle, options = {}) {

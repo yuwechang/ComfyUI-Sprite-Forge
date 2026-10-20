@@ -1,6 +1,6 @@
 # Rig animation: skeletal code-art characters
 
-Use `scripts/rig_animate.py` only when the user asks for code-drawn animation or no image route exists, and a small character (visible height up to about 48 px) should move through several clips with a fixed root, exact palette and feet that do not slide. Claude writes two text files, a rig (portable SVG) and an animation (`codeart2d.rig_anim.v1` JSON); the script poses, renders, checks and packages the frames. Everything is code-drawn, with no image model: say so whenever you deliver the frames.
+Use `scripts/comfyui_forge_rig_animate.py` only when the user asks for code-drawn animation or no image route exists, and a small character (visible height up to about 48 px) should move through several clips with a fixed root, exact palette and feet that do not slide. Claude writes two text files, a rig (portable SVG) and an animation (`codeart2d.rig_anim.v1` JSON); the script poses, renders, checks and packages the frames. Everything is code-drawn, with no image model: say so whenever you deliver the frames.
 
 Painterly, identity-rich or large characters belong to the image route. Rig animation still looks like a cut-out puppet; it is precise, editable and repeatable, not hand-drawn.
 
@@ -11,10 +11,10 @@ The worked example is `examples/hero.rig.svg` with `examples/hero.anim.json`: a 
 Run from the project root; outputs go to a new folder inside the project.
 
 ```text
-python "<skill-dir>/scripts/rig_animate.py" --rig hero.rig.svg --anim hero.anim.json --output-dir out/hero-v1 --route pixel --build-clips --strict-qc
-python "<skill-dir>/scripts/rig_animate.py" --anim hero.anim.json --output-dir out/hero-hd --route vector --zoom 4 --stroke-scale 1.0 --build-clips
-python "<skill-dir>/scripts/rig_animate.py" --anim hero.anim.json --output-dir out/hero-idle --clips idle --palette palette.json --variant night
-python "<skill-dir>/scripts/rig_animate.py" --anim hero.anim.json --output-dir out/hero-godot --godot-world-height 1.8
+python "<skill-dir>/scripts/comfyui_forge_rig_animate.py" --rig hero.rig.svg --anim hero.anim.json --output-dir out/hero-v1 --route pixel --build-clips --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_rig_animate.py" --anim hero.anim.json --output-dir out/hero-hd --route vector --zoom 4 --stroke-scale 1.0 --build-clips
+python "<skill-dir>/scripts/comfyui_forge_rig_animate.py" --anim hero.anim.json --output-dir out/hero-idle --clips idle --palette palette.json --variant night
+python "<skill-dir>/scripts/comfyui_forge_rig_animate.py" --anim hero.anim.json --output-dir out/hero-godot --godot-world-height 1.8
 ```
 
 In Claude Code `<skill-dir>` is `${CLAUDE_SKILL_DIR}`. `--rig` defaults to the `rig` path inside the animation (relative to the animation file). On success the script prints one JSON line with `output`, `metadata` (codeart-meta.json), `report` (rig-report.json), the clips and the frame count. Errors print `error: ...` and exit 1 (an unexpected failure too, as one `error: internal error (...)` line); a wrong argument is a usage error with exit 2, and `--help` works even before numpy is installed. JSON may be saved with a UTF-8 BOM. `--output-dir` must not exist; the work is staged beside it and published only after QA, so with `--strict-qc` a failed check leaves nothing behind. Without `--strict-qc` a failing result is published for inspection (the summary's `qa` is `fail` and `failed_checks` names the checks) and the script still exits 1, with `error: published with QA status fail: <check ids> (see rig-report.json)`; exit 0 means pass or warn.
@@ -31,12 +31,12 @@ In Claude Code `<skill-dir>` is `${CLAUDE_SKILL_DIR}`. `--rig` defaults to the `
 | `--palette FILE`, `--variant NAME` | Palette for `c-NAME` classes and the palette gate; a named variant recolours the rig. |
 | `--margin 1` | Minimum transparent margin in rig pixels. |
 | `--seam-range 0.8,1.25` | Allowed loop seam over median step (see QA). |
-| `--build-clips` | Run the sibling `comfyui-forge-generate2dsprite/scripts/build_animation_clips.py` by path into `compiled-clips/`. |
+| `--build-clips` | Run the sibling `comfyui-forge-generate2dsprite/scripts/comfyui_forge_build_animation_clips.py` by path into `compiled-clips/`. |
 | `--clips-schema v1\|v2` | Schema id written into clips.json: v2 by default, so events reach the compiled `events_ms`; v1 for a build_animation_clips that predates the v2 reader. |
 | `--godot-world-height H` | Also write `godot/<clip>.sprite3d.json` and `godot/sprite3d-bundle.json`. |
 | `--backend auto\|resvg_py\|resvg_js_cli\|chrome` | SVG rasterizer (resvg-py first). |
 
-Never send these frames through `generate2dsprite.py process`: its fit and alignment re-scale and move registered code art. Hand `clips.json` to `build_animation_clips.py` (or use `--build-clips`).
+Never send these frames through `comfyui_forge_generate2dsprite.py process`: its fit and alignment re-scale and move registered code art. Hand `clips.json` to `comfyui_forge_build_animation_clips.py` (or use `--build-clips`).
 
 ## The rig (portable SVG)
 

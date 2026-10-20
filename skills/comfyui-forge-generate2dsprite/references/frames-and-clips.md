@@ -6,24 +6,24 @@ Run commands from the user's project root. `<skill-dir>` is this skill's folder 
 
 | You have | Tool | Result |
 |---|---|---|
-| Registered sprite frames on one canvas with one shared root: processed sheets, scaled frames, or code-art frames | `build_animation_clips.py` | Clips with exact timing, events and transitions; byte-copied frames; verified previews; review sheets |
-| Complete rectangular frames: scene loops, full-frame phases, a sheet of whole images, or ambient FX | `assemble_frames.py` | Lossless frames, an atlas, a timed WebP and loop diagnostics; optional keying and spill-safe slicing |
+| Registered sprite frames on one canvas with one shared root: processed sheets, scaled frames, or code-art frames | `comfyui_forge_build_animation_clips.py` | Clips with exact timing, events and transitions; byte-copied frames; verified previews; review sheets |
+| Complete rectangular frames: scene loops, full-frame phases, a sheet of whole images, or ambient FX | `comfyui_forge_assemble_frames.py` | Lossless frames, an atlas, a timed WebP and loop diagnostics; optional keying and spill-safe slicing |
 
-Code-art frames go straight to `build_animation_clips.py` and never through `generate2dsprite.py process`: that path resamples and re-anchors them. No pipeline-meta file is needed. Image sheets go through `process` first, then come here.
+Code-art frames go straight to `comfyui_forge_build_animation_clips.py` and never through `comfyui_forge_generate2dsprite.py process`: that path resamples and re-anchors them. No pipeline-meta file is needed. Image sheets go through `process` first, then come here.
 
 Planning poses and timing is covered in [animation-planning.md](animation-planning.md). Wiring clips into a game loop is covered in [runtime-integration.md](runtime-integration.md).
 
-## build_animation_clips.py
+## comfyui_forge_build_animation_clips.py
 
 ```bash
-python "<skill-dir>/scripts/build_animation_clips.py" --manifest output/hero/clips.json --output-dir output/hero/clips-v1
-python "<skill-dir>/scripts/build_animation_clips.py" --manifest output/hero/clips.json --output-dir output/hero/clips-v2 --preview-scale 4 --preview-background checker --strict
+python "<skill-dir>/scripts/comfyui_forge_build_animation_clips.py" --manifest output/hero/clips.json --output-dir output/hero/clips-v1
+python "<skill-dir>/scripts/comfyui_forge_build_animation_clips.py" --manifest output/hero/clips.json --output-dir output/hero/clips-v2 --preview-scale 4 --preview-background checker --strict
 ```
 
 Inputs must meet these rules:
 
 - Frames are still 8-bit RGBA PNGs on one shared canvas. Each frame has both fully transparent and visible pixels.
-- Indexed (palette) and 16-bit PNGs are refused. Convert them first; `assemble_frames.py` accepts them and writes RGBA.
+- Indexed (palette) and 16-bit PNGs are refused. Convert them first; `comfyui_forge_assemble_frames.py` accepts them and writes RGBA.
 - Paths in the manifest are relative to the manifest file.
 - `anchor_px` is one shared canvas root, such as the ground point under the character. It is never a per-frame visible bottom, so per-frame anchors are refused.
 - The builder does not crop, align, key or resize anything.
@@ -133,13 +133,13 @@ Options:
 
 `--strict` turns any warning into a failure and publishes nothing. The numbers find symptoms; they never approve gait, anatomy or appeal.
 
-## assemble_frames.py
+## comfyui_forge_assemble_frames.py
 
 ```bash
-python "<skill-dir>/scripts/assemble_frames.py" --input output/scene/f0.png output/scene/f1.png output/scene/f2.png output/scene/f3.png --duration 250 --output-dir output/scene/loop
-python "<skill-dir>/scripts/assemble_frames.py" --sheet output/scene/raw-sheet.png --rows 2 --cols 2 --output-dir output/scene/frames
-python "<skill-dir>/scripts/assemble_frames.py" --sheet output/fox/raw-sheet.png --rows 2 --cols 4 --slice ownership --output-dir output/fox/frames
-python "<skill-dir>/scripts/assemble_frames.py" --sheet output/props/sheet.png --crop-boxes output/props/boxes.json --key chroma --output-dir output/props/frames
+python "<skill-dir>/scripts/comfyui_forge_assemble_frames.py" --input output/scene/f0.png output/scene/f1.png output/scene/f2.png output/scene/f3.png --duration 250 --output-dir output/scene/loop
+python "<skill-dir>/scripts/comfyui_forge_assemble_frames.py" --sheet output/scene/raw-sheet.png --rows 2 --cols 2 --output-dir output/scene/frames
+python "<skill-dir>/scripts/comfyui_forge_assemble_frames.py" --sheet output/fox/raw-sheet.png --rows 2 --cols 4 --slice ownership --output-dir output/fox/frames
+python "<skill-dir>/scripts/comfyui_forge_assemble_frames.py" --sheet output/props/sheet.png --crop-boxes output/props/boxes.json --key chroma --output-dir output/props/frames
 ```
 
 **Inputs.** Still PNGs of any mode are accepted: palette with transparency, 1, 2 and 4-bit, grey, grey with alpha, and 16-bit. They expand to 8-bit without loss; 16-bit keeps the high byte, and the conversion is recorded. 8-bit RGB stays RGB. With the default `--key none`, pixels stay exact, including RGB hidden under alpha 0. Animated PNGs and other formats are refused.
@@ -162,7 +162,7 @@ Two legacy forms are still read: a bare list of boxes, and a prop-pack `{"props"
 
 **Cross-cell spill.** Before cutting a sheet that has a transparent background, the tool checks for subject components that cross their cell. A subject component is 8-connected `alpha > 16`, and it is owned by the cell that holds most of its pixels. Specks under 4 px never count. On a crossing, the run fails and names the component, its owner, the pixels over the line and the overhang. For example, frame 3 of the fox fixture has 77 px of tail in frame 2's cell, overhanging by 7 px. Then pick one fix:
 
-- `--slice ownership` keeps every component whole in its owner's frame. Faint edge pixels join the nearest subject within `--attach-radius` px (default 6). Faint pixels that reach no subject stay in the cell that contains them. Every frame shares one padded canvas, and frame pixel `(u, v)` is sheet pixel `(u - padding[0] + cell x0, v - padding[1] + cell y0)`. Registration therefore stays the sheet's. Ownership slicing also accepts sheets whose size does not divide by the grid, using rounded cells. It is the shared `forge_core.ownership_slice`; `sheet_qc.py` uses the same slicer with stricter solid pixels (alpha above 127, 64 px) and drops the unreached haze instead.
+- `--slice ownership` keeps every component whole in its owner's frame. Faint edge pixels join the nearest subject within `--attach-radius` px (default 6). Faint pixels that reach no subject stay in the cell that contains them. Every frame shares one padded canvas, and frame pixel `(u, v)` is sheet pixel `(u - padding[0] + cell x0, v - padding[1] + cell y0)`. Registration therefore stays the sheet's. Ownership slicing also accepts sheets whose size does not divide by the grid, using rounded cells. It is the shared `forge_core.ownership_slice`; `comfyui_forge_sheet_qc.py` uses the same slicer with stricter solid pixels (alpha above 127, 64 px) and drops the unreached haze instead.
 - Regenerate the sheet with wider cells (see [animation-planning.md](animation-planning.md)).
 - `--allow-spill` cuts anyway and records a warning.
 

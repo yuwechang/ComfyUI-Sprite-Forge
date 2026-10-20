@@ -6,7 +6,7 @@ import unittest
 from PIL import Image,ImageSequence
 
 ROOT=Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('preview_export',ROOT/'tools/export_preview.py')
+spec=importlib.util.spec_from_file_location('preview_export',ROOT/'tools/comfyui_forge_export_preview.py')
 preview=importlib.util.module_from_spec(spec);spec.loader.exec_module(preview)
 
 class ExportTests(unittest.TestCase):

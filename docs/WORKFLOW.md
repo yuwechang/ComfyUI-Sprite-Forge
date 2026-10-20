@@ -61,7 +61,7 @@
 
 沒有尾圖功能時，**同時刪掉 bindings.last_image 與 last_frame_input**，也不要使用 --last-frame。節點的 ID 一律為字串，例如 `"349"`。
 
-範例 `17k+5` 表示總影格數對齊至 5、22、39、56、73……，3 秒 ×24 fps =72 格，向上對齊為73格。這是影格對齊的示意設定，不是所有模型的通用規則。自己的工作流若不同，應依節點規則設定 frame_multiple/frame_offset，例如允許任意正整數時為1與0。不要憑猜測修改。
+來源影格數統一使用 `max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17`，a 是正數秒數，可為小數。來源固定24fps，總影格為5、22、39、56、73……；不接受其他fps或對齊規則。
 
 目前工具仍要求輸入圖寬高為32的倍數。先等比例縮放角色並留背景空間，再送入；不要將角色硬拉到另一個長寬比。已記錄 registration_job 的輸入若改尺寸，需要重新準備登錄資料。
 
@@ -76,19 +76,25 @@ adapter 只提交 output_node 的祖先節點，捨棄不相連的 UI helper。�
 ## 4. 安裝與唯讀驗證
 
 ```powershell
-.\.venv\Scripts\python.exe tools/install_skills.py --apply --host codex --config local-comfyui/config.local.json
-.\.venv\Scripts\python.exe skills/comfyui-forge-generate2dmedia/scripts/comfyui_media.py --check
-.\.venv\Scripts\python.exe skills/comfyui-forge-generate2dmedia/scripts/route_media.py video --route comfyui --reference input.png --prompt-file prompt.txt --duration 3 --out-dir outputs/first-take --dry-run
+.\.venv\Scripts\python.exe tools/comfyui_forge_install_skills.py --apply --host codex --config local-comfyui/config.local.json
+.\.venv\Scripts\python.exe skills/comfyui-forge-generate2dmedia/scripts/comfyui_forge_media.py --check
+.\.venv\Scripts\python.exe skills/comfyui-forge-generate2dmedia/scripts/comfyui_forge_route_media.py video --route comfyui --reference input.png --prompt-file prompt.txt --duration 3 --out-dir outputs/first-take --dry-run
 ```
 
 input.png 與 prompt.txt 必須是你提供或準備的實際檔案。--dry-run 不連線、不建立輸出資料夾，--check 會讀取本機 API 但不生成。通過後，只有你要求實測生成時才移除 --dry-run。
 
 ## 可以交給朋友的 Codex 的提示詞
 
-> 我的 ComfyUI 已能正常執行這份 H3 API workflow：〈我的 JSON 路徑〉。請讀取 docs/WORKFLOW.md，建立此專案的 config.local.json，找出首圖、提示詞、寬高、總影格、fps與MP4輸出節點。保留原始 JSON；不相容時先說明需要調整的節點。安裝全部五個 skills，然後做 --check 與 dry-run，不要下載模型或提交 GPU 任務。
+> 我的 ComfyUI 已能正常執行這份 H3 API workflow：〈我的 JSON 路徑〉。請讀取 docs/WORKFLOW.md，建立此專案的 config.local.json，找出首圖、提示詞、寬高、總影格、fps與MP4輸出節點。保留原始 JSON；不相容時先說明需要調整的節點。安裝三個核心 skills，然後做 --check 與 dry-run，不要下載模型或提交 GPU 任務。
 
 ## 初始規格工具的設定
 
-`animation_spec.py`與提交adapter共用影格計算，無須解析度選擇器節點。`frame_minimum`可選（範本為5），配合`fps`、`frame_multiple`、`frame_offset`計算。Python `round`採最近整數、正中間取偶數；若Expression使用不同取整方式，請先統一。綁定`length`必須接收已對齊的總影格數，不要再把影格數當秒數乘24。
+`comfyui_forge_animation_spec.py`與提交adapter共用固定公式。設定省略fps與對齊欄位時使用24、17、5、5；衝突設定會停止。Python round採最近整數、正中間取偶數。length綁定必須接收整數總影格，不要再當秒數乘24。
 
 可在私人config加入已確認的最低尺寸，例如 `"planning": {"minimum_source_size": [512, 512], "dimension_multiple": 32}`。此512只是格式示意，不是所有模型最低值；請依自己的workflow實測填寫。自訂來源fps先更新私人config並確認fps綁定與輸出一致，工具不會靜默修改原workflow。
+
+## 每個新任務的亂數種子
+
+提交新影片任務且工作流提供種子欄位時，adapter 會產生非負整數亂數種子，寫入實際送出的圖與 job.json。續接 pending／unknown 或重用 done 任務沿用原 submitted-workflow，不改種子、不重送。dry-run 與 --check 不產生種子。
+
+優先使用 config 的 `bindings.seed: [node_id, input_name]`；未設定時，辨識有效輸出圖內的 `seed`／`noise_seed` 輸入，包含上游節點連線。沒有種子欄位就略過設定，照常提交；自訂欄位可用明確對應。所有找到的種子輸入使用同一任務種子，原始 workflow 不修改。若工作流使用特殊種子範圍或多個獨立種子策略，需先明確配置與驗證。

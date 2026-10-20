@@ -9,8 +9,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'skills/comfyui-forge-video2dsprite/scripts'
 sys.path.insert(0, str(SCRIPTS))
-import animation_spec as spec
-from frame_rules import frame_count
+import comfyui_forge_animation_spec as spec
+from comfyui_forge_frame_rules import frame_count
 
 
 class SpecificationTests(unittest.TestCase):
@@ -65,15 +65,15 @@ class SpecificationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'at least the final'):
             spec.plan(cell='256x256', source_size='128x128', mode='loop')
 
-    def test_configured_minimum_merges_duplicate_sizes_and_uses_own_cadence(self):
+    def test_configured_minimum_merges_duplicate_sizes_with_fixed_cadence(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'config.json'
-            path.write_text(json.dumps({'fps': 16, 'frame_multiple': 1, 'frame_offset': 0,
+            path.write_text(json.dumps({'fps': 24,
                                         'planning': {'minimum_source_size': [512, 512]}}))
             p = spec.plan(cell='32x32', config=path, mode='loop')
             self.assertEqual(p['sourceOptions']['quality']['sameDimensionsAs'], 'performance')
-            self.assertEqual(p['sourceOptions']['balanced']['frameCount'], 48)
-            self.assertEqual(p['sourceOptions']['balanced']['actualSeconds'], 3)
+            self.assertEqual(p['sourceOptions']['balanced']['frameCount'], 73)
+            self.assertEqual(p['sourceOptions']['balanced']['actualSeconds'], 73 / 24)
 
     def test_save_requires_confirmation_and_explicit_replace(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -95,7 +95,7 @@ class SpecificationTests(unittest.TestCase):
             with self.assertRaises(ValueError):spec.save(p, 'balanced', dest, True, True)
             # Previous source fps and changed config fps must be reconciled, not silently reused.
             self.assertEqual(spec.show(dest)['status'], 'reconfirm')
-            self.assertIn('fps differs', spec.show(dest)['reason'])
+            self.assertIn('fps must be 24', spec.show(dest)['reason'])
 
     def test_source_fps_override_requires_matching_workflow(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -111,19 +111,19 @@ class SpecificationTests(unittest.TestCase):
         for bad in [0, -1, float('nan'), float('inf')]:
             with self.assertRaises(ValueError):frame_count(bad, 24)
 
-    def test_omitted_config_cadence_matches_generic_adapter_defaults(self):
-        from frame_rules import from_config
+    def test_omitted_config_cadence_uses_fixed_expression(self):
+        from comfyui_forge_frame_rules import from_config
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'config.json';path.write_text('{"fps":24}')
             source = spec.plan(config=path, mode='loop')['sourceOptions']['balanced']
             self.assertEqual(source['frameCount'], from_config({'fps':24},3))
-            self.assertEqual(source['frameCount'],72)
+            self.assertEqual(source['frameCount'],73)
 
     def test_submitter_uses_exactly_same_frame_rules_as_recommendations(self):
         from test_comfyui_media import GRAPH, CONFIG
-        import comfyui_media
+        import comfyui_forge_media
         for duration in [.001, 2, 3, 6]:
-            graph, actual = comfyui_media.prepare(CONFIG, GRAPH, prompt='test', first='first.png', last=None,
+            graph, actual = comfyui_forge_media.prepare(CONFIG, GRAPH, prompt='test', first='first.png', last=None,
                                                   width=640, height=640, duration=duration)
             self.assertEqual(graph['4']['inputs']['length'], frame_count(duration, 24))
             self.assertEqual(actual, frame_count(duration, 24) / 24)

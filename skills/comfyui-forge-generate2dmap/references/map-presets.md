@@ -19,10 +19,10 @@ Rules of thumb used below:
 | Dungeon rooms | `room_chunk_mode` | fixed-size rooms (for example 15 x 11 tiles) | tile collision; door gaps match the sockets | crossing doors between rooms; one bundle per room | map_nav per room, the chunk validator across rooms |
 | Tactics board | `grid_mode` | one material pixel per tile (`material_map` scale = tile size) | material classes per tile (`liquid`, `hazard`, `solid`); small radius so every free tile is a valid node | tall dressing uses `rear_shift_and_fade` | map_bundle, map_nav, export_tiled |
 | Brawler belt | `side_scroll_mode` | a long plate; the belt is one walk-region polygon | belt polygon only; `ySquash` about 0.6 | intent exits at the belt ends | map_bundle, map_nav |
-| Platformer | `side_scroll_mode` | platform kit tiles | `one_way` platforms in the material map | exits and checkpoints | map_bundle for data; jump and gap checks belong to the side-scroll layout validator (`validate_layout.py`), not to map_nav |
+| Platformer | `side_scroll_mode` | platform kit tiles | `one_way` platforms in the material map | exits and checkpoints | map_bundle for data; jump and gap checks belong to the side-scroll layout validator (`comfyui_forge_validate_layout.py`), not to map_nav |
 | Story or point-and-click scene | `baked_scene_mode` | one complete picture | a walk region for the floor | interactions with `reach`, anchors whose `approach` is where the actor walks before acting | map_bundle, map_nav |
 
-`map_nav.py` checks top-down movement. Platformer reachability depends on jump arcs, which it does not model; for those maps it still checks the data, the `one_way` direction (blocked only when moving down onto it) and the exits. `one_way` is a side-scroll class; bundles carry no view mode, so the rule applies to every map and top-down presets never use it.
+`comfyui_forge_map_nav.py` checks top-down movement. Platformer reachability depends on jump arcs, which it does not model; for those maps it still checks the data, the `one_way` direction (blocked only when moving down onto it) and the exits. `one_way` is a side-scroll class; bundles carry no view mode, so the rule applies to every map and top-down presets never use it.
 
 ### Snippets
 
@@ -58,21 +58,21 @@ Tactics board (12 x 10 tiles of 32 px; materials one pixel per tile):
 
 | Target | Hand over | Produced by | What is verified |
 |---|---|---|---|
-| Tiled 1.10 or later | `map.tmj`, one `.tsx` per tileset, `props.tsx`, `images/` | `export_tiled.py export` | the written files re-render to the bundle's reference render with 0 px difference (built-in reader; pytiled-parser when installed); Tiled GUI not verified, including terrain brushes on the exported wangsets |
-| Phaser 3 | `map.embedded.tmj` (tilesets inlined) and `images/` | `export_tiled.py export --embedded-variant` | the same re-render check; Phaser itself is not run by the tests |
-| Godot 4.3 or later | a `.tres` TileSet and a `.tscn` scene | `export_godot.py` ([engine-maps.md](engine-maps.md)) | re-read by the exporter's own Godot text parser; editor import not verified |
-| LDtk 1.5.3 | an `.ldtk` project | `export_ldtk.py` ([engine-maps.md](engine-maps.md)) | required fields against a snapshot of the LDtk schema; editor not verified |
-| Custom engine (Canvas, Three.js, Pixi, others) | `map-bundle.json` and `nav-grid.json` (its `runtimeInputs` carry the tile collision and the material grid) | `map_bundle.py`, `map_nav.py check` | collision and reachability follow the forge_nav rules ([layered-map-contract.md](layered-map-contract.md)); [runtime/map-runtime.mjs](runtime/map-runtime.mjs) is the JavaScript collision query that mirrors them, loaded with `createMapRuntime(bundle, navGrid.runtimeInputs)` |
+| Tiled 1.10 or later | `map.tmj`, one `.tsx` per tileset, `props.tsx`, `images/` | `comfyui_forge_export_tiled.py export` | the written files re-render to the bundle's reference render with 0 px difference (built-in reader; pytiled-parser when installed); Tiled GUI not verified, including terrain brushes on the exported wangsets |
+| Phaser 3 | `map.embedded.tmj` (tilesets inlined) and `images/` | `comfyui_forge_export_tiled.py export --embedded-variant` | the same re-render check; Phaser itself is not run by the tests |
+| Godot 4.3 or later | a `.tres` TileSet and a `.tscn` scene | `comfyui_forge_export_godot.py` ([engine-maps.md](engine-maps.md)) | re-read by the exporter's own Godot text parser; editor import not verified |
+| LDtk 1.5.3 | an `.ldtk` project | `comfyui_forge_export_ldtk.py` ([engine-maps.md](engine-maps.md)) | required fields against a snapshot of the LDtk schema; editor not verified |
+| Custom engine (Canvas, Three.js, Pixi, others) | `map-bundle.json` and `nav-grid.json` (its `runtimeInputs` carry the tile collision and the material grid) | `comfyui_forge_map_bundle.py`, `comfyui_forge_map_nav.py check` | collision and reachability follow the forge_nav rules ([layered-map-contract.md](layered-map-contract.md)); [runtime/map-runtime.mjs](runtime/map-runtime.mjs) is the JavaScript collision query that mirrors them, loaded with `createMapRuntime(bundle, navGrid.runtimeInputs)` |
 | Unity | a Tiled export through a third-party importer, or a reader of `map-bundle.json` | not provided here | not verified |
 
-`nav-grid.json` (from `map_nav.py check`) lists one character per grid node: `#` for a blocked node, otherwise a hex digit of its open moves (east 1, south 2, west 4, north 8; south is +y). Node `(col, row)` sits at `((col + 0.5) * cell, (row + 0.5) * cell)`. A runtime can path-find on it directly; `blockedRects` lists the blocked nodes as disjoint rectangles in world pixels.
+`nav-grid.json` (from `comfyui_forge_map_nav.py check`) lists one character per grid node: `#` for a blocked node, otherwise a hex digit of its open moves (east 1, south 2, west 4, north 8; south is +y). Node `(col, row)` sits at `((col + 0.5) * cell, (row + 0.5) * cell)`. A runtime can path-find on it directly; `blockedRects` lists the blocked nodes as disjoint rectangles in world pixels.
 
-A game that walks the bundle with [runtime/map-runtime.mjs](runtime/map-runtime.mjs) needs two inputs the module cannot read itself, because it reads no files: the collision of every placed tile (the tileset manifests' `tiles[].collision`) and the material map's pixels. `nav-grid.json` carries both, read by forge_nav, as `runtimeInputs`: `tileSolids` (world solids, `source` names the layer) and `materialGrid` (bit planes of the blocking and `one_way` pixels; `null` without a material map). Pass that object as the options, `createMapRuntime(bundle, navGrid.runtimeInputs)`. Without it, `createMapRuntime` throws a `TypeError` for a bundle with a tiles layer or a `material_map` rather than let the actor walk through tile walls and blocking materials; `{ignoreMaterialMap: true}` walks without the material map on purpose. Run `map_nav.py check` again whenever the bundle, a tileset or the material map changes.
+A game that walks the bundle with [runtime/map-runtime.mjs](runtime/map-runtime.mjs) needs two inputs the module cannot read itself, because it reads no files: the collision of every placed tile (the tileset manifests' `tiles[].collision`) and the material map's pixels. `nav-grid.json` carries both, read by forge_nav, as `runtimeInputs`: `tileSolids` (world solids, `source` names the layer) and `materialGrid` (bit planes of the blocking and `one_way` pixels; `null` without a material map). Pass that object as the options, `createMapRuntime(bundle, navGrid.runtimeInputs)`. Without it, `createMapRuntime` throws a `TypeError` for a bundle with a tiles layer or a `material_map` rather than let the actor walk through tile walls and blocking materials; `{ignoreMaterialMap: true}` walks without the material map on purpose. Run `comfyui_forge_map_nav.py check` again whenever the bundle, a tileset or the material map changes.
 
 ```bash
-python "<skill-dir>/scripts/map_nav.py" check --bundle map/map-bundle.json --output-dir map/qa/nav
-python "<skill-dir>/scripts/export_tiled.py" export --bundle map/map-bundle.json --output-dir map/tiled --embedded-variant
-python "<skill-dir>/scripts/export_tiled.py" verify --map map/tiled/map.tmj --bundle map/map-bundle.json --reader pytiled
+python "<skill-dir>/scripts/comfyui_forge_map_nav.py" check --bundle map/map-bundle.json --output-dir map/qa/nav
+python "<skill-dir>/scripts/comfyui_forge_export_tiled.py" export --bundle map/map-bundle.json --output-dir map/tiled --embedded-variant
+python "<skill-dir>/scripts/comfyui_forge_export_tiled.py" verify --map map/tiled/map.tmj --bundle map/map-bundle.json --reader pytiled
 ```
 
 The `--reader pytiled` check needs `python -m pip install pytiled-parser`; without it the tool prints that command and exits.

@@ -1,7 +1,7 @@
-# Finishing registered clips (finish_frames.py)
+# Finishing registered clips (comfyui_forge_finish_frames.py)
 
-`scripts/finish_frames.py` turns registered RGBA frames (the `frames/` folder of
-`register_clip.py apply`, or its output folder) into game-ready frames. **HD is the
+`scripts/comfyui_forge_finish_frames.py` turns registered RGBA frames (the `frames/` folder of
+`comfyui_forge_register_clip.py apply`, or its output folder) into game-ready frames. **HD is the
 default finish**; the pixel finish is an option. Both take the same registration and
 the same downscale of the silhouette, so one clip finished both ways has the same
 anchor; the pixel finish's outline adds 1 px around it.
@@ -10,8 +10,8 @@ Both finishes can put every frame on a fixed cell (`--canvas`) and lock the desi
 colours to the master (`--colour-lock`, the default inside sprite sets). The plain pixel
 finish ports game-opus55 `tools/pixelate.py` (see the last section); the default pixel
 finish is the bold one below. Keying, matte erosion and un-mixing stay in
-`video2dsprite.py clean/process` (soft matte). Locks stay in `register_clip.py apply
---lock`, and frame choice and timing stay in `gait_loop.py` and `retime.py`.
+`comfyui_forge_video2dsprite.py clean/process` (soft matte). Locks stay in `comfyui_forge_register_clip.py apply
+--lock`, and frame choice and timing stay in `comfyui_forge_gait_loop.py` and `comfyui_forge_retime.py`.
 
 Commands run from your project root. `<skill-dir>` is this skill's folder
 (`${CLAUDE_SKILL_DIR}` in Claude Code). `hd` and `pixel` write a new `--output-dir`.
@@ -21,18 +21,18 @@ publishes nothing. Success prints one ASCII JSON line. Errors print `error: ...`
 
 ## Where it sits
 
-1. `register_clip.py apply`: registered frames on the master canvas.
-2. `finish_frames.py hd` or `pixel`: finished frames.
-3. `gait_loop.py select` or `retime.py`. A selection made on the registered frames
+1. `comfyui_forge_register_clip.py apply`: registered frames on the master canvas.
+2. `comfyui_forge_finish_frames.py hd` or `pixel`: finished frames.
+3. `comfyui_forge_gait_loop.py select` or `comfyui_forge_retime.py`. A selection made on the registered frames
    still applies, because finished frames keep the source file names and order.
-4. `engine_export.py package --clean-dir <fin>/frames --source-size W,H --source-anchor X,Y`.
+4. `comfyui_forge_engine_export.py package --clean-dir <fin>/frames --source-size W,H --source-anchor X,Y`.
    Take W,H and X,Y from `finish.json` `size` and `anchor`, and pass no
    `--registration`. A pixel finish adds `--pixel-art --sampling nearest`.
 
 ## HD finish (default)
 
 ```text
-python "<skill-dir>/scripts/finish_frames.py" hd --frames work/hero-idle-reg --output-dir work/hero-idle-hd --target-height 96 --role hero --character hero
+python "<skill-dir>/scripts/comfyui_forge_finish_frames.py" hd --frames work/subject-motion-reg --output-dir work/subject-motion-hd --target-height 96 --role hero --character hero
 ```
 
 - **Scale.** `--target-height` is the output height, in px, of the rest-pose body at 1x.
@@ -56,9 +56,9 @@ python "<skill-dir>/scripts/finish_frames.py" hd --frames work/hero-idle-reg --o
 ## Pixel finish (bold by default)
 
 ```text
-python "<skill-dir>/scripts/finish_frames.py" pixel --frames work/fox-run-reg --output-dir work/fox-run-px --target-height 47 --canvas 48x64 --colors 32
-python "<skill-dir>/scripts/finish_frames.py" palette build --frames work/hero-idle-reg work/hero-run-reg work/hero-attack-reg --colors 32 --reserve "#000000" --out work/hero-palette.json
-python "<skill-dir>/scripts/finish_frames.py" pixel --frames work/hero-idle-reg --output-dir work/hero-idle-px --target-height 60 --palette work/hero-palette.json --loop-policy cycle
+python "<skill-dir>/scripts/comfyui_forge_finish_frames.py" pixel --frames work/fox-run-reg --output-dir work/fox-run-px --target-height 47 --canvas 48x64 --colors 32
+python "<skill-dir>/scripts/comfyui_forge_finish_frames.py" palette build --frames work/subject-motion-reg work/hero-run-reg work/subject-motion-reg --colors 32 --reserve "#000000" --out work/hero-palette.json
+python "<skill-dir>/scripts/comfyui_forge_finish_frames.py" pixel --frames work/subject-motion-reg --output-dir work/subject-motion-px --target-height 60 --palette work/hero-palette.json --loop-policy cycle
 ```
 
 A video frame downscaled by area averaging comes out soft: every edge pixel is an
@@ -94,7 +94,7 @@ quantize:
    keeps last frame's index while that colour stays within `--margin` (squared OKLab
    distance; default 0.0004, dE 0.02) and its opacity while alpha stays between 0.4 and
    0.6. With `--loop-policy cycle` (the default), frame 0 follows the last frame;
-   `pingpong` and `oneshot` (attacks) are the other policies.
+   `oneshot` is the policy for either single-play motion contract. Reverse playback is not supported.
 6. **Cleanup.** Specks and pinholes (`cleanup_alpha`), then two passes of lone-pixel
    cleanup: a pixel without a 4-neighbour of its own index takes the neighbours' majority,
    unless it is 0.22 L lighter or darker than every neighbour (an eye, a highlight), which
@@ -119,8 +119,7 @@ frame instead of 155-162 (old cold-test sheet: 726-919), binary alpha instead of
 levels, noise flips 13.7 per pair against 17.7 for the old 255-colour finish.
 
 The finish says nothing about timing. Frame times are the selection's (gait_loop, retime;
-`sprite_set.py plan --frame-ms 80` or `--fps 12.5` for exact 80 ms frames on a 25 Hz tick
-grid).
+use a confirmed final specification with `--fps 12.5` for exact 80 ms frames).
 
 ## Fixed cell (--canvas)
 
@@ -138,7 +137,7 @@ so the cell survives into the atlas.
 Image-to-video models drift design colours between frames: the 2026-10-06 run's leather
 boots turned olive in one frame and maroon in the next, and a fast hand picked up pink.
 `--colour-lock MASTER.png` (the keyed master, RGBA; `rest` uses the rest frame) runs
-`colour_lock.py` on the finished frames (pixel: before the lift and the palette):
+`comfyui_forge_colour_lock.py` on the finished frames (pixel: before the lift and the palette):
 
 - the master's colours are learned per height band (5 overlapping bands from the feet up,
   12 OKLab k-means colours each), so a boot pixel can only match boot-height colours;
@@ -158,15 +157,15 @@ boots turned olive in one frame and maroon in the next, and a fast hand picked u
 `--lock-strength` (0..1, default 1) scales every step. `finish.json` `colourLock` records
 the stats and, at 1x, `measure()` before and after: hue flips per frame pair (pixels of
 similar lightness whose chroma jumps by more than 0.03), the per-region spread of the mean
-chroma across frames, and the foreign share. `colour_lock.py measure --frames DIR ...
+chroma across frames, and the foreign share. `comfyui_forge_colour_lock.py measure --frames DIR ...
 --master master.png [--loop]` prints the same numbers for any frame folders. Measured on
 Aria's live run (24-frame loop): hue flips 352 -> 170 per pair, region spread mean 0.0059 ->
 0.0012 (max 0.0245 -> 0.0072), the boots' frame-to-frame chroma step 0.024 -> 0.003.
 
 ## One character, many actions
 
-Finish the idle (or the clip that holds the master still) with `--target-height`. Give
-every other action `--scale-ref <idle finish folder or finish.json>`. The inherited scale
+Finish an explicitly selected common scale-reference clip with `--target-height`. Give
+every other action `--scale-ref <shared reference finish folder or finish.json>`. The inherited scale
 is the reference scale x sqrt(reference rest area / this rest area), clamped to +-3%
 (pixelate.py). Two checks report on it:
 
@@ -180,13 +179,13 @@ character then share one body height.
 ## Cast line-up
 
 ```text
-python "<skill-dir>/scripts/finish_frames.py" lineup --sets work/hero-idle-hd work/slime-idle-hd boss=work/ogre-idle-hd work/wisp-idle-hd --out work/cast-lineup.png
+python "<skill-dir>/scripts/comfyui_forge_finish_frames.py" lineup --sets work/subject-motion-hd work/subject-b-hd boss=work/subject-c-hd work/subject-d-hd --out work/cast-lineup.png
 ```
 
 What each `--sets` entry can be:
 
 - a finished clip;
-- a folder of one character's finished clips (an `idle` clip represents the set, and
+- a folder of one character's finished clips (an explicitly selected reference clip represents the set, and
   the `one-height` check warns when the clips' rest heights differ by more than 1 px);
 - a plain frame folder (frame 0 is measured).
 
@@ -326,7 +325,7 @@ FileExistsError for an existing output. The bold pieces are library functions to
 
 The ASF equivalents of the rest:
 
-- chroma key, unmix and erode (:57-128, :371-381) are the soft matte in `video2dsprite.py clean/process`;
-- feet, x and hip locks (:510-524) are `register_clip.py apply --lock`;
-- dedupe and the loop window (:413-452) are `gait_loop.py`;
-- per-tick timelines are `retime.py`.
+- chroma key, unmix and erode (:57-128, :371-381) are the soft matte in `comfyui_forge_video2dsprite.py clean/process`;
+- feet, x and hip locks (:510-524) are `comfyui_forge_register_clip.py apply --lock`;
+- dedupe and the loop window (:413-452) are `comfyui_forge_gait_loop.py`;
+- per-tick timelines are `comfyui_forge_retime.py`.

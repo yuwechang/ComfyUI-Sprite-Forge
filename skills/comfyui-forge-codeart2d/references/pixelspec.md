@@ -2,7 +2,7 @@
 
 PixelSpec is a JSON file that holds small pixel art as editable text: a palette of single
 characters, rows of those characters, layers, poses, frames, palette variants and clips.
-`scripts/render_pixelspec.py` turns it into checked 8-bit RGBA PNG frames with numpy and
+`scripts/comfyui_forge_render_pixelspec.py` turns it into checked 8-bit RGBA PNG frames with numpy and
 Pillow only (no SVG rasterizer, no image model). codeart2d is the last resort: use it only when
 the user asks for code-drawn art or no image route exists. It suits small pixel characters, props
 and FX up to about 48 px of visible height; see [style-envelope.md](style-envelope.md).
@@ -32,7 +32,7 @@ directions, layers, poses, mirrored legs, flipped side view, 3 variants, 4 clips
 ```
 
 ```text
-python "<skill-dir>/scripts/render_pixelspec.py" --spec gem.pixelspec.json --output-dir out/gem-v1 --preview-scale 8 --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_render_pixelspec.py" --spec gem.pixelspec.json --output-dir out/gem-v1 --preview-scale 8 --strict-qc
 ```
 
 This writes `out/gem-v1/ruby/frames/gem.png`, `out/gem-v1/sapphire/frames/gem.png`,
@@ -158,15 +158,15 @@ out/slime-v1/
 
 ## Handing frames on
 
-- `--build-clips` runs `comfyui-forge-generate2dsprite/scripts/build_animation_clips.py` from the
+- `--build-clips` runs `comfyui-forge-generate2dsprite/scripts/comfyui_forge_build_animation_clips.py` from the
   sibling generate2dsprite skill by path (`--clips-builder` points elsewhere). The bundle
   holds the frames, lossless WebP previews and `animation-clips.json` for engines.
-- Never send code art through `generate2dsprite.py process`: its fit and preserve modes
+- Never send code art through `comfyui_forge_generate2dsprite.py process`: its fit and preserve modes
   resample and re-anchor art that is already exact.
-- Review at game size with `scripts/pixel_qa.py`:
+- Review at game size with `scripts/comfyui_forge_pixel_qa.py`:
 
 ```text
-python "<skill-dir>/scripts/pixel_qa.py" --input "out/slime-v1/green/frames/*.png" --palette out/slime-v1/codeart-meta.json --variant green --outline "#1a1c2c" --anchor 16,31 --review out/slime-review.png --onion --strict --report out/slime-qa.json
+python "<skill-dir>/scripts/comfyui_forge_pixel_qa.py" --input "out/slime-v1/green/frames/*.png" --palette out/slime-v1/codeart-meta.json --variant green --outline "#1a1c2c" --anchor 16,31 --review out/slime-review.png --onion --strict --report out/slime-qa.json
 ```
 
 ## Authoring tips

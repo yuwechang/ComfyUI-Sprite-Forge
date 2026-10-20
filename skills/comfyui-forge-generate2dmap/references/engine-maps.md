@@ -3,10 +3,10 @@
 Four tools turn map data into engine files or check it before art is made. Run them from the project root; outputs go to a new folder inside the project. In Claude Code `<skill-dir>` is `${CLAUDE_SKILL_DIR}`.
 
 ```text
-python "<skill-dir>/scripts/export_godot.py" --bundle maps/town/map-bundle.json --output-dir build/town-godot --name town
-python "<skill-dir>/scripts/export_ldtk.py" --bundle maps/town/map-bundle.json --output-dir build/town-ldtk --name town
-python "<skill-dir>/scripts/validate_chunks.py" --chunks maps/dungeon/room-chunks.json --output-dir maps/dungeon/qa/chunks-v1
-python "<skill-dir>/scripts/validate_layout.py" --layout maps/levee/layout.json --output-dir maps/levee/qa/layout-v1
+python "<skill-dir>/scripts/comfyui_forge_export_godot.py" --bundle maps/town/map-bundle.json --output-dir build/town-godot --name town
+python "<skill-dir>/scripts/comfyui_forge_export_ldtk.py" --bundle maps/town/map-bundle.json --output-dir build/town-ldtk --name town
+python "<skill-dir>/scripts/comfyui_forge_validate_chunks.py" --chunks maps/dungeon/room-chunks.json --output-dir maps/dungeon/qa/chunks-v1
+python "<skill-dir>/scripts/comfyui_forge_validate_layout.py" --layout maps/levee/layout.json --output-dir maps/levee/qa/layout-v1
 ```
 
 Every tool prints one ASCII JSON line with its status and paths, prints `error: ...` on stderr and exits 1 on failure (2 on a usage error), and refuses an existing `--output-dir`. The exporters publish nothing when the read-back QA fails; `--strict-qc` also refuses their warnings (things outside the world, rounded LDtk positions). The validators print only the summary without `--output-dir`; with it they publish the report and debug image even for a failing level (exit 1), unless `--strict-qc` is given. JSON inputs are read as UTF-8 with an optional BOM; NaN, Infinity and duplicate keys are refused.
@@ -29,7 +29,7 @@ The input is `generate2dmap.map_bundle.v2` (`references/schemas/map.schema.json#
 - **Tiles layers**: `data` is rows (top first) of tileset tile indices, `-1` or `null` for empty, as inline JSON, a `.json` file, or a `.csv` file. The grid is `ceil(world / tile_size)` cells. A tile index `i` sits at atlas column `i % columns`, row `i // columns` of the tileset image.
 - **Tilesets**: `generate2dmap.tileset.v1` manifests. `wang` is `[top_left, top_right, bottom_left, bottom_right]` material indices; `blob_mask` sets bits N, NE, E, SE, S, SW, W, NW. Tile `collision` shapes are in tile pixels and are the tile collision (integration decision D5); a tile without shapes whose `properties.walkable` is false blocks its whole cell.
 - **Prop images**, first match wins, the one order every map tool uses (D6): `objects[].image` (optional `image_sha256`); the bundle's `props[prop]` (an inline item's `image`, relative to the bundle, or the accepted item of the prop pack named by `pack` and `label`); a prop pack whose accepted `label` equals `objects[].prop` (the bundle's optional `prop_packs: [{manifest, sha256}]`, then `--prop-pack FILE`, repeatable); then `objects[].occluder.source`. `anchor_px` must lie inside the image. `flip_x` mirrors the art around the anchor x.
-- **Collision** is read through `scripts/forge_nav.py`, the one blocking set every map tool shares (D2): `collision.solids` and `rects`, the footprints of objects whose `solid` is not false (from the object, else its `props` item; scaled once by `scale`, not for `basis: "world_px"`; mirrored by `flip_x`), the per-tile collision of placed tiles and the blocking `material_map` classes. A bundle forge_nav cannot read (for example a material map pixel that matches no material) is refused. A shape without area (a rect with `w` or `h` 0, an ellipse with `rx` or `ry` 0) blocks nothing, so forge_nav, the runtime and every exporter skip it; export_godot names it in a warning.
+- **Collision** is read through `scripts/comfyui_forge_nav.py`, the one blocking set every map tool shares (D2): `collision.solids` and `rects`, the footprints of objects whose `solid` is not false (from the object, else its `props` item; scaled once by `scale`, not for `basis: "world_px"`; mirrored by `flip_x`), the per-tile collision of placed tiles and the blocking `material_map` classes. A bundle forge_nav cannot read (for example a material map pixel that matches no material) is refused. A shape without area (a rect with `w` or `h` 0, an ellipse with `rx` or `ry` 0) blocks nothing, so forge_nav, the runtime and every exporter skip it; export_godot names it in a warning.
 - Layers are listed bottom first. The first `objects` layer holds every object.
 
 ## Godot 4.3+ mapping

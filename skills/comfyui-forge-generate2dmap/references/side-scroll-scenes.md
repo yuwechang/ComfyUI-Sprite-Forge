@@ -23,7 +23,7 @@ scenery layers:  file, source size, display scale, scroll factor, repeat interva
 
 The `segments` and `physics` part is the map contract `layout_v1` in [map.schema.json](schemas/map.schema.json): `segments [[x0, x1, kind]]`, `physics {jumpHeight, jumpDistance, maxSlopeDeg, stepUp}` and `viewports`. The side-scroll layout validator reads that file and checks floating props, deck thickness, slope and step limits, gaps against the jump arc, arena width at 16:9 and 19.5:9, and reachability ([engine-maps.md](engine-maps.md) lists what it does not verify). Use the real controller for anything it cannot judge.
 
-    python "<skill-dir>/scripts/validate_layout.py" --layout stage/layout.json --output-dir stage/qa/layout-v1
+    python "<skill-dir>/scripts/comfyui_forge_validate_layout.py" --layout stage/layout.json --output-dir stage/qa/layout-v1
 
 Choose stage length from the task: one screen for a room or an asset test, two connected viewport widths for a scrolling sample. A brawler uses the engine's walkable belt and depth rules instead of platform jumps. Map-bundle starting values for a platformer or a brawler belt are in [map-presets.md](map-presets.md).
 
@@ -85,7 +85,7 @@ Measure the returned atlas, then write a spec. `source_box` is `[left, top, righ
 }
 ```
 
-    python "<skill-dir>/scripts/extract_platform_strip.py" --input art/platform-atlas.png --spec art/platform-spec.json --output-dir art/platform-kit-v1 --background-mode chroma_key --decoration-band-px 3 --max-seam-ratio 1.25 --strict-qc
+    python "<skill-dir>/scripts/comfyui_forge_extract_platform_strip.py" --input art/platform-atlas.png --spec art/platform-spec.json --output-dir art/platform-kit-v1 --background-mode chroma_key --decoration-band-px 3 --max-seam-ratio 1.25 --strict-qc
 
 The input may be RGB(A), a palette PNG with transparency, grey or grey+alpha. The output directory must be new: work is staged beside it and published only after QC, so a failed strict run leaves nothing behind. It writes `<id>.png` per piece (exact crops; RGB is zeroed where alpha is 0), `strip-preview.png` (left cap, the middles cycled to at least three, right cap) and `platform-strip.json` (`generate2dmap.platform_strip.v2`): manifest-relative paths with sha256, crops, `collision_rect_px`, `anchor_px`, band coverage, the measured surface, every join's metrics and a QA envelope. It never trims, resizes, normalises or repairs seams. Success prints one JSON line with the output and manifest paths.
 
@@ -124,7 +124,7 @@ Platformers draw in stable bands, back to front. Do not reuse top-down dynamic y
 | actors and FX | player, enemies, pickups, projectiles, hit effects | spawn or z order | runtime bodies |
 | foreground | occluders in front of the play plane (posts, leaves) | authored order | never |
 
-In a map bundle a one-way deck is a `one_way` material: it blocks only moves that drop onto it from above, so actors jump up through it and stand on it (the forge_nav rules in [layered-map-contract.md](layered-map-contract.md)); `map_nav.py` does not model jump arcs. With the generic composer, give each band explicit stable `sortY` values and put foreground items in its `foreground` array; that is preview ordering, not physics. An isolated prop's image rectangle, support point, collision shape and interaction reach are separate data: measure the support point in source pixels and use `anchorPx` for padded art. Floating decor uses a mounting anchor. A brawler with depth movement may sort by its ground line instead.
+In a map bundle a one-way deck is a `one_way` material: it blocks only moves that drop onto it from above, so actors jump up through it and stand on it (the forge_nav rules in [layered-map-contract.md](layered-map-contract.md)); `comfyui_forge_map_nav.py` does not model jump arcs. With the generic composer, give each band explicit stable `sortY` values and put foreground items in its `foreground` array; that is preview ordering, not physics. An isolated prop's image rectangle, support point, collision shape and interaction reach are separate data: measure the support point in source pixels and use `anchorPx` for padded art. Floating decor uses a mounting anchor. A brawler with depth movement may sort by its ground line instead.
 
 ## 7. Camera notes
 

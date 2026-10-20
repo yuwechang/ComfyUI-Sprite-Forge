@@ -11,15 +11,15 @@ from unittest.mock import patch
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills/comfyui-forge-generate2dmedia/scripts"))
-import comfyui_media as comfy
-import route_media as route
+import comfyui_forge_media as comfy
+import comfyui_forge_route_media as route
 
 GRAPH = {
     "1": {"class_type": "LoadImage", "inputs": {"image": "old.png"}},
     "2": {"class_type": "LoadImage", "inputs": {"image": "last.png"}},
     "3": {"class_type": "Text", "inputs": {"text": "old prompt"}},
     "4": {"class_type": "I2V", "inputs": {"first_frame": ["1", 0], "last_frame": ["2", 0],
-        "prompt": ["3", 0], "width": 64, "height": 64, "length": 5}},
+        "prompt": ["3", 0], "width": 64, "height": 64, "length": 5, "seed": 123}},
     "5": {"class_type": "SaveVideo", "inputs": {"images": ["4", 0], "fps": 24}},
     "99": {"class_type": "UIOnly", "inputs": {}},
 }
@@ -28,7 +28,10 @@ CONFIG = {"url": "http://127.0.0.1:8188", "workflow": "workflow.json", "output_n
     "bindings": {"image": ["1", "image"], "last_image": ["2", "image"],
         "prompt": ["3", "text"], "width": ["4", "width"], "height": ["4", "height"],
         "length": ["4", "length"], "fps": ["5", "fps"]}, "last_frame_input": ["4", "last_frame"]}
-MP4 = b"\x00\x00\x00\x18ftypisom" + b"test-payload"
+def box(kind, body):
+    return (len(body) + 8).to_bytes(4, "big") + kind + body
+
+MP4 = box(b"ftyp", b"isom" + b"\0" * 4) + box(b"moov", box(b"trak", box(b"mdia", box(b"hdlr", b"\0" * 8 + b"vide" + b"\0" * 12)))) + box(b"mdat", b"test-payload")
 
 
 class FakeClient:
@@ -42,6 +45,8 @@ class FakeClient:
 
     def call(self, method, path, body=None, content_type=None, raw=False):
         self.calls.append((method, path, body))
+        if path == '/object_info':
+            return {'I2V':{'input':{'required':{'seed':['INT',{'min':0,'max':2**53-1}]}}}}
         if path == "/prompt":
             return {"prompt_id": "test-id"}
         if path.startswith("/history/"):
@@ -119,8 +124,8 @@ class ComfyTests(unittest.TestCase):
 
     def test_route_is_explicit_and_reports_pin_duration(self):
         self.assertEqual(["local:comfyui"], route.requested_routes("video", "auto"))
-        wanted = route.Wanted(last_frame=route.DUMMY_IMAGE, duration=2)
-        result = route.resolve("video", "comfyui", settings={}, wanted=wanted)
+        wanted = route.Wanted(last_frame=self.root / "tail.png", duration=2)
+        result = route.resolve("video", "comfyui", wanted=wanted)
         self.assertTrue(result.candidates[0].pin)
         self.assertEqual(result.candidates[0].duration, 56 / 24)
 
@@ -157,13 +162,13 @@ class ComfyTests(unittest.TestCase):
 
     def test_sprite_set_does_not_replace_pending_folder(self):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills/comfyui-forge-video2dsprite/scripts"))
-        import sprite_set
+        import comfyui_forge_sprite_set
         folder = self.root / "take" / "media"
         folder.mkdir(parents=True)
         for status in ("pending", "unknown"):
             (folder / "job.json").write_text(json.dumps({"provider": "comfyui", "status": status}))
-            runner = SimpleNamespace(root=self.root, media_argv=["must-not-run"])
-            result = sprite_set.SetRunner.generate(runner, "idle", {"dir": "take"}, 1)
+            runner = SimpleNamespace(root=self.root)
+            result = comfyui_forge_sprite_set.SetRunner.generate(runner, "idle", {"dir": "take"}, 1)
             self.assertEqual(result["status"], "error")
             self.assertTrue((folder / "job.json").is_file())
 

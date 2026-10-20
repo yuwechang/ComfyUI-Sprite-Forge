@@ -9,17 +9,17 @@ Commands run from the user's project root; `<skill-dir>` is this skill's folder 
 1. Write a planned `stage.json` (section 2) with the canvas you will ask for, usually 16:9.
 2. Turn it into a layout guide and a prompt block:
 
-       python "<skill-dir>/scripts/scene_layout_guide.py" --stage plan/stage.json --output-dir plan/guide-v1
+       python "<skill-dir>/scripts/comfyui_forge_scene_layout_guide.py" --stage plan/stage.json --output-dir plan/guide-v1
 
 3. Generate the plate with `guide.png` attached as a layout reference and `prompt-block.txt` pasted into the prompt (section 4). `guide.png` is an opaque RGB image (a reference for the image model, not a layer to composite). Measure the returned size; a requested size is not a returned size.
 4. Set `sourceSize` to the real size and `plate` to the file, look at the painting, and move polygons, slots and regions onto what was actually painted. UV values survive a resize of the same aspect.
 5. Validate the stage and look at every render:
 
-       python "<skill-dir>/scripts/validate_stage.py" --stage scene/stage.json --output-dir scene/stage-qa-v1
+       python "<skill-dir>/scripts/comfyui_forge_validate_stage.py" --stage scene/stage.json --output-dir scene/stage-qa-v1
 
 6. Extract the painted lights, curate them and check the atmosphere data (sections 2 and 6 of [hd2d-presentation.md](hd2d-presentation.md)):
 
-       python "<skill-dir>/scripts/extract_scene_lights.py" extract --plate scene/plate.png --stage scene/stage.json --output-dir scene/lights-v1 --expect 3
+       python "<skill-dir>/scripts/comfyui_forge_extract_scene_lights.py" extract --plate scene/plate.png --stage scene/stage.json --output-dir scene/lights-v1 --expect 3
 
 7. Add environment motion only inside regions that may move: the masked-motion tools (build_motion_mask and scene_motion, described in [background-scenes.md](background-scenes.md) when present) take source-pixel regions, so a stage region with `appliesTo` `motion` becomes a motion-plan `protected` entry at `uv * sourceSize`.
 8. Check every variant of the plate against the master before it ships (section 5).
@@ -80,7 +80,7 @@ Warnings: footprints of two slots overlap, water lies inside a ground polygon, `
 
 The layout solver projects the plate onto a reference viewport per aspect (720 px high; 390 px wide for portrait) with the stage's fit, squeezes the formation sideways to stay on screen, and tries each slot's own spot first. When that foot is not standable, or the actor box leaves the screen, hits a reserved UI panel or crowds another actor, it searches a grid over the ground band for the nearest valid foot, shrinking the box along a scale ladder (1.0, 0.9, ... down to `--min-scale`, never below 38 px). Heroes and enemies keep their own side of the screen. Actors are drawn in foot-y order (`drawOrder`). The default `--ui-profile battle` reserves a typical battle HUD (top bar, party, command, detail, target list, log); pass your HUD with `--ui panels.json` (`{"landscape": [{"id": "command", "box": [0.8, 0.45, 0.98, 0.85]}], "portrait": [...]}`, boxes in viewport fractions) or switch it off with `--ui-profile none`. Actor boxes default to 0.2 (hero), 0.18 (enemy) and 0.4 (boss) of the plate height with the foot at 96% of the box; change them with `--actor-height hero=0.16`.
 
-    python "<skill-dir>/scripts/validate_stage.py" --stage scene/stage.json --output-dir scene/stage-qa-v2 --aspects 4:3,16:9,21:9,9:19.5 --ui panels.json --actor-height hero=0.16 --strict
+    python "<skill-dir>/scripts/comfyui_forge_validate_stage.py" --stage scene/stage.json --output-dir scene/stage-qa-v2 --aspects 4:3,16:9,21:9,9:19.5 --ui panels.json --actor-height hero=0.16 --strict
 
 Read `layout-<aspect>.png` (and `-boss`): green ground, red no-walk regions, blue water, grey UI panels, actor boxes with their footprint, scale factor and draw order; red boxes are unplaced. `stage-overlay.png` shows the whole plate with every slot labelled. With a plate the best status is `needs-visual-review`: the numbers cannot see whether the painted ground really is open and dry where the polygon says.
 
@@ -102,15 +102,15 @@ Add items with `--forbid "fallen logs"`; `--no-default-forbid` starts the list e
 
 A night version, a lit lantern, a broken bridge or a festival dressing must keep the master's camera, canvas and every region the game relies on. Ask for an edit of the accepted master that changes only the named area, then check it:
 
-    python "<skill-dir>/scripts/edit_locality_check.py" --before scene/plate.png --after scene/plate-lit.png --stage scene/stage.json --protect-ground --edit-box 0.62,0.18,0.74,0.42 --output-dir scene/lit-check-v1
+    python "<skill-dir>/scripts/comfyui_forge_edit_locality_check.py" --before scene/plate.png --after scene/plate-lit.png --stage scene/stage.json --protect-ground --edit-box 0.62,0.18,0.74,0.42 --output-dir scene/lit-check-v1
 
 - Protected: the stage's regions with `appliesTo` `edit` (or none), `--protect-ground` (ground polygons and playable band), `--protect-band V0:V1` and `--protect-box U0,V0,U1,V1`.
 - With `--edit-box`, everything outside the boxes (past `--edit-margin`, default 0.02 of the width) must stay unchanged and the boxes must change.
 - A region fails when more than `--max-changed` (0.002) of it changed by over `--pixel-threshold` (24 levels after a 3x3 blur), when its mean difference exceeds `--max-mae` (3 levels: a variant that darkens the whole room fails here), or when one connected change covers `--min-component` (0.0005) of the image (a lamp that went out elsewhere).
-- Sizes must match or the resize must be recorded: `--conform conform.json` (conform_background.py output or any `{scale, src_rect, out_size}` transform) or `--resize cover|stretch`. An unrecorded resize is an error, never a guess.
+- Sizes must match or the resize must be recorded: `--conform conform.json` (comfyui_forge_conform_background.py output or any `{scale, src_rect, out_size}` transform) or `--resize cover|stretch`. An unrecorded resize is an error, never a guess.
 - `--exact` (same size only) fails on any changed byte, for composited variants.
 
-    python "<skill-dir>/scripts/edit_locality_check.py" --before scene/plate.png --after scene/plate-night-1280.png --resize stretch --protect-band 0.62:1 --output-dir scene/night-check-v1
+    python "<skill-dir>/scripts/comfyui_forge_edit_locality_check.py" --before scene/plate.png --after scene/plate-night-1280.png --resize stretch --protect-band 0.62:1 --output-dir scene/night-check-v1
 
 When a check fails, regenerate or repaint the variant; masks and crops cannot restore protected content. Read `locality-diff.png`: changed pixels are red, sub-threshold differences faint orange, protected regions orange (red when they fail), edit boxes green.
 

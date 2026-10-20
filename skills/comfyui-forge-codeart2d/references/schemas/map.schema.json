@@ -71,7 +71,7 @@
       }
     },
     "prop_pack_v2": {
-      "description": "prop-pack.json from extract_prop_pack.py. v1 manifests (no schema key) stay readable; with schema generate2dmap.prop_pack.v2 every accepted item is fully registered. layout_mode says how the cells were found (a grid, explicit boxes or auto boxes) and qa is the extraction's QA envelope. Producers also record the tool, input, source mode, the grid and keying settings, the despill and hygiene reports, the geometry settings, the auto-box settings, edge-touching props and warnings.",
+      "description": "prop-pack.json from comfyui_forge_extract_prop_pack.py. v1 manifests (no schema key) stay readable; with schema generate2dmap.prop_pack.v2 every accepted item is fully registered. layout_mode says how the cells were found (a grid, explicit boxes or auto boxes) and qa is the extraction's QA envelope. Producers also record the tool, input, source mode, the grid and keying settings, the despill and hygiene reports, the geometry settings, the auto-box settings, edge-touching props and warnings.",
       "type": "object",
       "required": ["accepted", "rejected"],
       "properties": {
@@ -132,7 +132,7 @@
       "properties": {"anchor": {"enum": ["manifest", "px"]}}
     },
     "placements_v2": {
-      "description": "Placements for compose_layered_preview.py, grouped into props, objects, actors and foreground (drawn last). v1 input (no schema key, or a bare list) stays readable.",
+      "description": "Placements for comfyui_forge_compose_layered_preview.py, grouped into props, objects, actors and foreground (drawn last). v1 input (no schema key, or a bare list) stays readable.",
       "anyOf": [
         {"type": "array", "items": {"$ref": "#/$defs/placement"}},
         {
@@ -298,7 +298,7 @@
       "anyOf": [{"required": ["image"]}, {"required": ["pack", "label"]}]
     },
     "map_bundle_v2": {
-      "description": "A playable map: geometry, layers, objects, collision, portals, spawns, anchors and interactions, all from data. Paths are relative to the bundle file and may carry sha256. generate2dmap.map_bundle.v1 (the roadmap 4.10 draft: inline tilesets {id, image, kind, tiles}, footprints {type, rx, ry} or {x, y, w, h}, no world, collision or props) is still read: map_bundle.py maps it onto these fields in memory. A v2 bundle with any tiles layer needs tile_size and tilesets. id is the map id that portal targets (map:spawn) and entranceByFrom use; by default it is the bundle file name without .json and a .map-bundle, -bundle or .bundle suffix, and a file named map-bundle.json takes its folder name. name is a display name. props is the bundle's props registry (bundleProp): it gives objects[].prop its image, anchor and footprint. Prop art is found in this order by every reader (per D6): objects[].image, props[label], prop_packs by label, then objects[].occluder.source. roads are centre lines in world px (NPC paths, debug overlays); provenance records how the bundle was generated.",
+      "description": "A playable map: geometry, layers, objects, collision, portals, spawns, anchors and interactions, all from data. Paths are relative to the bundle file and may carry sha256. generate2dmap.map_bundle.v1 (the roadmap 4.10 draft: inline tilesets {id, image, kind, tiles}, footprints {type, rx, ry} or {x, y, w, h}, no world, collision or props) is still read: comfyui_forge_map_bundle.py maps it onto these fields in memory. A v2 bundle with any tiles layer needs tile_size and tilesets. id is the map id that portal targets (map:spawn) and entranceByFrom use; by default it is the bundle file name without .json and a .map-bundle, -bundle or .bundle suffix, and a file named map-bundle.json takes its folder name. name is a display name. props is the bundle's props registry (bundleProp): it gives objects[].prop its image, anchor and footprint. Prop art is found in this order by every reader (per D6): objects[].image, props[label], prop_packs by label, then objects[].occluder.source. roads are centre lines in world px (NPC paths, debug overlays); provenance records how the bundle was generated.",
       "type": "object",
       "required": ["schema"],
       "properties": {
@@ -640,7 +640,7 @@
       ]
     },
     "motion_plan_v1": {
-      "description": "Masked environment motion on a static plate (build_motion_mask.py, scene_motion.py). protected regions get an exact-zero core with a feather-wide transition outside it (default 8 px). forward-overlap loops never reverse water; range is a half-open [a, b) of source frames. registration places the clip on the plate (plate = clip x scale + offset): an explicit scale and offset, which come together, win over fit. encode.crf allows the VP9 range; the scene tools encode H.264 Main and accept 1-51.",
+      "description": "Masked environment motion on a static plate (comfyui_forge_build_motion_mask.py, comfyui_forge_scene_motion.py). protected regions get an exact-zero core with a feather-wide transition outside it (default 8 px). forward-overlap loops never reverse water; range is a half-open [a, b) of source frames. registration places the clip on the plate (plate = clip x scale + offset): an explicit scale and offset, which come together, win over fit. encode.crf allows the VP9 range; the scene tools encode H.264 Main and accept 1-51.",
       "type": "object",
       "required": ["schema", "sourceSize", "regions", "loop"],
       "properties": {
@@ -713,7 +713,7 @@
       }
     },
     "lights_v1": {
-      "description": "Point lights at UV positions plus the light-cookie image they were baked into (extract_scene_lights.py). radius is a fraction of the plate width (radiusUnit plate-width). flicker is an amplitude, or {hz, depth, phase}; extract_scene_lights.py cookie refuses a flicker object without hz.",
+      "description": "Point lights at UV positions plus the light-cookie image they were baked into (comfyui_forge_extract_scene_lights.py). radius is a fraction of the plate width (radiusUnit plate-width). flicker is an amplitude, or {hz, depth, phase}; comfyui_forge_extract_scene_lights.py cookie refuses a flicker object without hz.",
       "type": "object",
       "required": ["schema", "lights", "cookie"],
       "properties": {
@@ -757,7 +757,7 @@
       }
     },
     "layout_v1": {
-      "description": "Side-scroll level grammar for validate_layout.py: segments are [x0, x1, kind] in world pixels (validate_layout needs whole-pixel bounds); kinds maps extra segment kinds to ground, gap or hazard; physics limits judge gaps, slopes and steps (a gap is measured between the edge-column centres, so the widest crossable gap is jumpDistance - 1); viewports are [w, h] sizes or aspect strings such as 19.5:9. The ground is a surface polyline or a flat groundY, never both. Props with kind deck, platform, plank or bridge are one-way standable surfaces {x0, x1, y, thickness} (or x and w); exits must be reachable from the first spawn (default: the level end) and arenas must be at least the view width plus camera travel (default: the level).",
+      "description": "Side-scroll level grammar for comfyui_forge_validate_layout.py: segments are [x0, x1, kind] in world pixels (validate_layout needs whole-pixel bounds); kinds maps extra segment kinds to ground, gap or hazard; physics limits judge gaps, slopes and steps (a gap is measured between the edge-column centres, so the widest crossable gap is jumpDistance - 1); viewports are [w, h] sizes or aspect strings such as 19.5:9. The ground is a surface polyline or a flat groundY, never both. Props with kind deck, platform, plank or bridge are one-way standable surfaces {x0, x1, y, thickness} (or x and w); exits must be reachable from the first spawn (default: the level end) and arenas must be at least the view width plus camera travel (default: the level).",
       "type": "object",
       "required": ["schema", "segments", "physics"],
       "properties": {
@@ -861,7 +861,7 @@
       "not": {"required": ["surface", "groundY"]}
     },
     "room_chunk_v1": {
-      "description": "Room chunks with edge sockets on N, E, S and W (offset and width along that edge, in pixels) and the stitching graph (validate_chunks.py). A chunk's grid gives its walkability, one character per cell px square ('.' walkable, '#' blocked). The graph is either layout rows of chunk ids (null for an empty cell; a repeated id is one instance per cell) or edges (b sits on a's side, shifted offset px along it). start names the start chunk or instance (such as corridor@0,1), optionally with a point in its pixels.",
+      "description": "Room chunks with edge sockets on N, E, S and W (offset and width along that edge, in pixels) and the stitching graph (comfyui_forge_validate_chunks.py). A chunk's grid gives its walkability, one character per cell px square ('.' walkable, '#' blocked). The graph is either layout rows of chunk ids (null for an empty cell; a repeated id is one instance per cell) or edges (b sits on a's side, shifted offset px along it). start names the start chunk or instance (such as corridor@0,1), optionally with a point in its pixels.",
       "type": "object",
       "required": ["schema", "chunks", "graph"],
       "properties": {
@@ -939,7 +939,7 @@
       }
     },
     "parallaxLayer": {
-      "description": "One parallax layer as validate_parallax.py reads it. One uniform scale only: width, height, display_size, scale_xy and repeat sizes come from the image and are refused. parallax_build also records the layer's generator kind (sky, ridge, clouds, foreground or image) and the image's sha256.",
+      "description": "One parallax layer as comfyui_forge_validate_parallax.py reads it. One uniform scale only: width, height, display_size, scale_xy and repeat sizes come from the image and are refused. parallax_build also records the layer's generator kind (sky, ridge, clouds, foreground or image) and the image's sha256.",
       "type": "object",
       "required": ["id", "role", "image", "alpha"],
       "properties": {
@@ -965,7 +965,7 @@
       }
     },
     "parallax_plan": {
-      "description": "Input plan for validate_parallax.py. camera ranges are [min, max]; camera.pivot (top-left, center or an [x, y] point in viewport pixels) is the zoom origin. pixel_art and sampling ask for whole-pixel placement; aspects (such as 19.5:9, 4/3 or 1.6) are swept with aspect_policy (expand keeps the plan viewport and grows the other side; fixed-height and fixed-width keep one side).",
+      "description": "Input plan for comfyui_forge_validate_parallax.py. camera ranges are [min, max]; camera.pivot (top-left, center or an [x, y] point in viewport pixels) is the zoom origin. pixel_art and sampling ask for whole-pixel placement; aspects (such as 19.5:9, 4/3 or 1.6) are swept with aspect_policy (expand keeps the plan viewport and grows the other side; fixed-height and fixed-width keep one side).",
       "type": "object",
       "required": ["viewport", "layers"],
       "properties": {
@@ -988,7 +988,7 @@
       }
     },
     "nav_grid_v1": {
-      "description": "nav-grid.json from map_nav.py (plan Appendix C, D1-D4): node (col, row) sits at ((col + 0.5) * cell, (row + 0.5) * cell) with cell = max(1, round(actorRadius / 2)). moves has one character per node: '#' for a blocked node, else a hex digit of its open moves (E=1, S=2 (+y), W=4, N=8). reachable marks the nodes reached from the spawns and arrivals. blockedRects are disjoint [x, y, w, h] rectangles in world px whose union is exactly the blocked nodes.",
+      "description": "nav-grid.json from comfyui_forge_map_nav.py (plan Appendix C, D1-D4): node (col, row) sits at ((col + 0.5) * cell, (row + 0.5) * cell) with cell = max(1, round(actorRadius / 2)). moves has one character per node: '#' for a blocked node, else a hex digit of its open moves (E=1, S=2 (+y), W=4, N=8). reachable marks the nodes reached from the spawns and arrivals. blockedRects are disjoint [x, y, w, h] rectangles in world px whose union is exactly the blocked nodes.",
       "type": "object",
       "required": ["schema", "map", "world", "actor", "cell", "cols", "rows", "moves", "reachable", "blockedRects"],
       "properties": {
@@ -1026,19 +1026,19 @@
       }
     },
     "map_bundle_report_v1": {
-      "description": "map_bundle.py validate report: a QA envelope plus the bundle facts and every problem ({severity, path, message, code: schema|file|sha256|rule}).",
+      "description": "comfyui_forge_map_bundle.py validate report: a QA envelope plus the bundle facts and every problem ({severity, path, message, code: schema|file|sha256|rule}).",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "required": ["schema", "problems"],
       "properties": {"schema": {"const": "generate2dmap.map_bundle_report.v1"}, "problems": {"type": "array"}}
     },
     "nav_report_v1": {
-      "description": "map_nav.py check report: a QA envelope plus the map, cell, starts, targets, links, thin gaps, unreachable pockets and the bundle's own nav block.",
+      "description": "comfyui_forge_map_nav.py check report: a QA envelope plus the map, cell, starts, targets, links, thin gaps, unreachable pockets and the bundle's own nav block.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "required": ["schema", "targets"],
       "properties": {"schema": {"const": "generate2dmap.nav_report.v1"}, "targets": {"type": "array"}}
     },
     "tiled_export_v1": {
-      "description": "export_tiled.py export report: a QA envelope plus the Tiled tilesets and layers written.",
+      "description": "comfyui_forge_export_tiled.py export report: a QA envelope plus the Tiled tilesets and layers written.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "required": ["schema", "tiled"],
       "properties": {"schema": {"const": "generate2dmap.tiled_export.v1"}, "tiled": {"type": "object"}}
@@ -1061,7 +1061,7 @@
       }
     },
     "engine_export_v1": {
-      "description": "export_godot.py and export_ldtk.py report: the engine files written from one map bundle, the copied assets, what the engine files do not carry (notExported: every blocking class or field the engine format cannot represent is listed, per D2) and the parse-back QA. Paths are relative to the report's folder, except assets[].source, which is relative to the bundle's folder.",
+      "description": "comfyui_forge_export_godot.py and comfyui_forge_export_ldtk.py report: the engine files written from one map bundle, the copied assets, what the engine files do not carry (notExported: every blocking class or field the engine format cannot represent is listed, per D2) and the parse-back QA. Paths are relative to the report's folder, except assets[].source, which is relative to the bundle's folder.",
       "type": "object",
       "required": ["schema", "tool", "engine", "bundle", "files", "assets", "notExported", "warnings", "qa"],
       "properties": {
@@ -1106,7 +1106,7 @@
       }
     },
     "chunk_validation_v1": {
-      "description": "validate_chunks.py report: placements, socket pairing per shared edge, chunk-graph and walkability-grid reachability, and the QA envelope.",
+      "description": "comfyui_forge_validate_chunks.py report: placements, socket pairing per shared edge, chunk-graph and walkability-grid reachability, and the QA envelope.",
       "type": "object",
       "required": ["schema", "tool", "status", "mode", "placements", "sockets", "qa"],
       "properties": {
@@ -1183,7 +1183,7 @@
       }
     },
     "layout_validation_v1": {
-      "description": "validate_layout.py report: standable spans, ledges and steep faces, gaps with their jump numbers, prop support, arena widths, reachability, and the QA envelope.",
+      "description": "comfyui_forge_validate_layout.py report: standable spans, ledges and steep faces, gaps with their jump numbers, prop support, arena widths, reachability, and the QA envelope.",
       "type": "object",
       "required": ["schema", "tool", "status", "extent", "physics", "spans", "gaps", "props", "qa"],
       "properties": {
@@ -1247,7 +1247,7 @@
       }
     },
     "platform_strip_v2": {
-      "description": "platform-strip.json from extract_platform_strip.py: exact rectangular crops of a left cap, one or more interchangeable middle variants and a right cap, published with their sha256. Collision is declared metadata: collision_rect_px is [x, y, width, height] in piece pixels, collision_span_px a half-open column range. surface records the art's top per collision column against the declared surface. Every join is measured with common edgeSeam (forge_core.edge_seam_report, per D9). v1 manifests (schema generate2dmap.platform_strip.v1) stored absolute source paths and had no qa block. Producers also record the keyer settings, the coordinate contract text, qc thresholds and notes, and the fork's full_edge and contact_band metrics per join.",
+      "description": "platform-strip.json from comfyui_forge_extract_platform_strip.py: exact rectangular crops of a left cap, one or more interchangeable middle variants and a right cap, published with their sha256. Collision is declared metadata: collision_rect_px is [x, y, width, height] in piece pixels, collision_span_px a half-open column range. surface records the art's top per collision column against the declared surface. Every join is measured with common edgeSeam (forge_core.edge_seam_report, per D9). v1 manifests (schema generate2dmap.platform_strip.v1) stored absolute source paths and had no qa block. Producers also record the keyer settings, the coordinate contract text, qc thresholds and notes, and the fork's full_edge and contact_band metrics per join.",
       "type": "object",
       "required": [
         "schema",
@@ -1410,7 +1410,7 @@
       }
     },
     "terrain_tile_bundle_v2": {
-      "description": "terrain-bundle.json from extract_terrain_tiles.py. Each atlas row is one terrain: a fill or a Wang corner transition row (variants carry wang [TL, TR, BL, BR] material indices into materials). Tiles are square, rect, iso-diamond or hex, base or overlay; tile.footprint is the polygon in tile pixels. runtime and material numbers appear only when given, or with --emit-runtime-defaults (listed in runtime_defaults_applied); v1 bundles (generate2dmap.terrain_tile_bundle.v1) always wrote them. seamless_verified stays false: image tiles have no exact seam proof; the seamless policy records wrap and Wang seams with common edgeSeam (per D9). Producers also record the keyer settings, the requested background mode and cell shape, qc thresholds, the Wang coverage and seam reports and the cross-variant seams per terrain, and crop_box, shape_fill and border.max_delta per variant.",
+      "description": "terrain-bundle.json from comfyui_forge_extract_terrain_tiles.py. Each atlas row is one terrain: a fill or a Wang corner transition row (variants carry wang [TL, TR, BL, BR] material indices into materials). Tiles are square, rect, iso-diamond or hex, base or overlay; tile.footprint is the polygon in tile pixels. runtime and material numbers appear only when given, or with --emit-runtime-defaults (listed in runtime_defaults_applied); v1 bundles (generate2dmap.terrain_tile_bundle.v1) always wrote them. seamless_verified stays false: image tiles have no exact seam proof; the seamless policy records wrap and Wang seams with common edgeSeam (per D9). Producers also record the keyer settings, the requested background mode and cell shape, qc thresholds, the Wang coverage and seam reports and the cross-variant seams per terrain, and crop_box, shape_fill and border.max_delta per variant.",
       "type": "object",
       "required": ["schema", "source", "grid", "tile", "terrains", "processing", "qc", "qa"],
       "properties": {
@@ -1551,7 +1551,7 @@
       }
     },
     "stageLayout": {
-      "description": "One solved battle layout of validate_stage.py: the plate projected onto a reference viewport (fit, scale, offset), the reserved UI panels and each actor's slot, chosen foot (viewport pixels and plate UV), box [x0, y0, x1, y1) in viewport pixels, scale-ladder factor (null when unplaced) and the foot-y draw order.",
+      "description": "One solved battle layout of comfyui_forge_validate_stage.py: the plate projected onto a reference viewport (fit, scale, offset), the reserved UI panels and each actor's slot, chosen foot (viewport pixels and plate UV), box [x0, y0, x1, y1) in viewport pixels, scale-ladder factor (null when unplaced) and the foot-y draw order.",
       "type": "object",
       "required": ["aspect", "ratio", "formation", "render", "viewport", "scale", "actors", "drawOrder"],
       "properties": {
@@ -1602,7 +1602,7 @@
       }
     },
     "stage_qa_v1": {
-      "description": "validate_stage.py report (stage-qa.json): a QA envelope over a stage.v1 file plus the stage summary, the solver settings and every solved layout.",
+      "description": "comfyui_forge_validate_stage.py report (stage-qa.json): a QA envelope over a stage.v1 file plus the stage summary, the solver settings and every solved layout.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": ["schema", "stage", "settings", "layouts"],
@@ -1625,7 +1625,7 @@
       }
     },
     "scene_guide_v1": {
-      "description": "scene_layout_guide.py metadata (guide.json): the files written, the plan restated in whole percent of the canvas (x from the left, y from the top), the forbidden-in-walk list, bakedContent and a QA envelope of the plan's own consistency.",
+      "description": "comfyui_forge_scene_layout_guide.py metadata (guide.json): the files written, the plan restated in whole percent of the canvas (x from the left, y from the top), the forbidden-in-walk list, bakedContent and a QA envelope of the plan's own consistency.",
       "type": "object",
       "required": [
         "schema",
@@ -1774,7 +1774,7 @@
       }
     },
     "lights_qa_v1": {
-      "description": "extract_scene_lights.py report (lights-qa.json): a QA envelope over the plate or the edited lights file, with the detector settings and statistics and each light's measured blob; rejected candidates say why.",
+      "description": "comfyui_forge_extract_scene_lights.py report (lights-qa.json): a QA envelope over the plate or the edited lights file, with the detector settings and statistics and each light's measured blob; rejected candidates say why.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": ["schema"],
@@ -1813,7 +1813,7 @@
       }
     },
     "atmosphere_qa_v1": {
-      "description": "extract_scene_lights.py atmosphere report (atmosphere-qa.json): a QA envelope over an atmosphere.v1 file with its mote, shaft and mist summary.",
+      "description": "comfyui_forge_extract_scene_lights.py atmosphere report (atmosphere-qa.json): a QA envelope over an atmosphere.v1 file with its mote, shaft and mist summary.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": ["schema", "summary"],
@@ -1833,7 +1833,7 @@
       }
     },
     "edit_locality_v1": {
-      "description": "edit_locality_check.py report (locality-qa.json): a QA envelope comparing a plate variant with its master through a recorded transform (out = (src - src_rect[0:2]) * scale); per protected region, outside the edit boxes and overall: changed pixels and fraction, mean absolute difference, p99 and the largest change components.",
+      "description": "comfyui_forge_edit_locality_check.py report (locality-qa.json): a QA envelope comparing a plate variant with its master through a recorded transform (out = (src - src_rect[0:2]) * scale); per protected region, outside the edit boxes and overall: changed pixels and fraction, mean absolute difference, p99 and the largest change components.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": ["schema", "transform", "comparison", "regions"],
@@ -1880,7 +1880,7 @@
       }
     },
     "motion_mask_qa_v1": {
-      "description": "build_motion_mask.py mask-qa.json: a QA envelope plus the figures of the published mask. A mask is published only when its protected cores are exactly 0. envelope (when a clip was given) measures the clip's moving pixels against the mask. Producers also record envelope.range, minArea, lumaRangeMax and transform (fit, scale, offset, clipSize, plateSize, footprint, map), settings (protectFeather, lumaMinArea, luma, warnMeanOpacity) and the clip input's kind, frames, size and fps.",
+      "description": "comfyui_forge_build_motion_mask.py mask-qa.json: a QA envelope plus the figures of the published mask. A mask is published only when its protected cores are exactly 0. envelope (when a clip was given) measures the clip's moving pixels against the mask. Producers also record envelope.range, minArea, lumaRangeMax and transform (fit, scale, offset, clipSize, plateSize, footprint, map), settings (protectFeather, lumaMinArea, luma, warnMeanOpacity) and the clip input's kind, frames, size and fps.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": [
@@ -1963,7 +1963,7 @@
       }
     },
     "scene_motion_v1": {
-      "description": "scene-motion.json from scene_motion.py build: the record of a masked environment loop on a plate: the plan, plate, clip and mask inputs, the clip's registration on the plate, the loop (each output frame as one or two [source frame, weight] pairs), the composite and its exact-zero outside-mask check, the H.264 loop and every encode attempt, and the QA envelope with its metrics and thresholds. registration may also carry clipSize, plateSize, map and shiftEstimates [{frame, status, shift, maeAtZero, maeAtBest, pixels or reason}]; loop.blend, composite.formula, video.bytes and video.profile appear too, and metrics is the loop-qa.json metrics object.",
+      "description": "scene-motion.json from comfyui_forge_scene_motion.py build: the record of a masked environment loop on a plate: the plan, plate, clip and mask inputs, the clip's registration on the plate, the loop (each output frame as one or two [source frame, weight] pairs), the composite and its exact-zero outside-mask check, the H.264 loop and every encode attempt, and the QA envelope with its metrics and thresholds. registration may also carry clipSize, plateSize, map and shiftEstimates [{frame, status, shift, maeAtZero, maeAtBest, pixels or reason}]; loop.blend, composite.formula, video.bytes and video.profile appear too, and metrics is the loop-qa.json metrics object.",
       "type": "object",
       "required": [
         "schema",
@@ -2086,7 +2086,7 @@
       }
     },
     "scene_loop_qa_v1": {
-      "description": "loop-qa.json from scene_motion.py qa: a QA envelope of a decoded scene loop with its metrics (frames, keyframes, the decoded seam inside the mask, mean opacity, motion energy, the leak ring and per-region figures; also gop, video, rgbSteps, protectedDrift and poster) and thresholds.",
+      "description": "loop-qa.json from comfyui_forge_scene_motion.py qa: a QA envelope of a decoded scene loop with its metrics (frames, keyframes, the decoded seam inside the mask, mean opacity, motion energy, the leak ring and per-region figures; also gop, video, rgbSteps, protectedDrift and poster) and thresholds.",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "type": "object",
       "required": ["schema", "metrics", "thresholds"],
@@ -2101,7 +2101,7 @@
       }
     },
     "composedPlacement": {
-      "description": "One placement as compose_layered_preview.py drew it: the canvas rectangle, the effective anchor in source pixels (and where it came from) and where it landed in the world and on the canvas, the sortY and how it was chosen, the visible bounds and the footprint the audit used. flip_x is true when the art was drawn mirrored around its anchor x, the footprint with it (D6).",
+      "description": "One placement as comfyui_forge_compose_layered_preview.py drew it: the canvas rectangle, the effective anchor in source pixels (and where it came from) and where it landed in the world and on the canvas, the sortY and how it was chosen, the visible bounds and the footprint the audit used. flip_x is true when the art was drawn mirrored around its anchor x, the footprint with it (D6).",
       "type": "object",
       "required": [
         "id",
@@ -2175,7 +2175,7 @@
       }
     },
     "compose_report_v2": {
-      "description": "compose_layered_preview.py --report: the inputs, the sort and anchor policies, the explicit compositing order and every placement in draw order. Paths are relative to the report file. The --audit-out file is a common qaEnvelope with schema generate2dmap.compose_audit.v1, placements, overlaps and walk_area.",
+      "description": "comfyui_forge_compose_layered_preview.py --report: the inputs, the sort and anchor policies, the explicit compositing order and every placement in draw order. Paths are relative to the report file. The --audit-out file is a common qaEnvelope with schema generate2dmap.compose_audit.v1, placements, overlaps and walk_area.",
       "type": "object",
       "required": [
         "schema",
@@ -2240,7 +2240,7 @@
       }
     },
     "parallaxSeam": {
-      "description": "Wrap-seam diagnostics of one repeat axis (validate_parallax.py): the v1 edge-equality numbers (alpha_mae, visible_rgb_mae, jointly_visible_pixels, premultiplied_rgb_mae) plus the seam measured over the columns (x) or rows (y) with its verdict. Per D9 there is one seam metric: the seam fields and the snake_case verdict are common edgeSeam (forge_core.edge_seam_report), and the forge_core.seam_report p95 numbers may be kept as extra fields; reports written before validate_parallax adopted edge_seam_report carry the seam_report numbers without seam_ratio and near_median. Never a seamlessness proof: seamless_verified is always false.",
+      "description": "Wrap-seam diagnostics of one repeat axis (comfyui_forge_validate_parallax.py): the v1 edge-equality numbers (alpha_mae, visible_rgb_mae, jointly_visible_pixels, premultiplied_rgb_mae) plus the seam measured over the columns (x) or rows (y) with its verdict. Per D9 there is one seam metric: the seam fields and the snake_case verdict are common edgeSeam (forge_core.edge_seam_report), and the forge_core.seam_report p95 numbers may be kept as extra fields; reports written before validate_parallax adopted edge_seam_report carry the seam_report numbers without seam_ratio and near_median. Never a seamlessness proof: seamless_verified is always false.",
       "type": "object",
       "required": ["axis", "alpha_mae", "premultiplied_rgb_mae", "seamless_verified"],
       "properties": {
@@ -2328,7 +2328,7 @@
       }
     },
     "parallax_validation_v2": {
-      "description": "validate_parallax.py result (stdout and --report): the verdict, issues and warnings, the resolved pivot and coverage policy, per-layer coverage at every camera/zoom extreme, seam diagnostics, the pixel grid and the aspect sweep. A malformed plan gives only schema, passed false and issues. v1 reports stay valid.",
+      "description": "comfyui_forge_validate_parallax.py result (stdout and --report): the verdict, issues and warnings, the resolved pivot and coverage policy, per-layer coverage at every camera/zoom extreme, seam diagnostics, the pixel grid and the aspect sweep. A malformed plan gives only schema, passed false and issues. v1 reports stay valid.",
       "type": "object",
       "required": ["schema", "passed", "issues"],
       "properties": {
@@ -2397,7 +2397,7 @@
       "then": {"properties": {"issues": {"maxItems": 0}}}
     },
     "conform_v1": {
-      "description": "conform.json from conform_background.py conform: how a background was cropped and uniformly scaled to the output, so points map both ways: out = (src - src_rect[0:2]) * scale. ground-fit also records the ground line it kept. The validate-crops report (crops-qa.json) is a common qaEnvelope with schema generate2dmap.crops_qa.v1, plate_size, subjects and one check per crop.",
+      "description": "conform.json from comfyui_forge_conform_background.py conform: how a background was cropped and uniformly scaled to the output, so points map both ways: out = (src - src_rect[0:2]) * scale. ground-fit also records the ground line it kept. The validate-crops report (crops-qa.json) is a common qaEnvelope with schema generate2dmap.crops_qa.v1, plate_size, subjects and one check per crop.",
       "type": "object",
       "required": ["schema", "mode", "source", "output", "transform", "qa"],
       "properties": {
@@ -2596,7 +2596,7 @@
       }
     },
     "scene_preview_qa_v1": {
-      "description": "preview-qa.json of build_scene_preview.py: a QA envelope plus what the page contains and the --verify result. A published report whose status is fail makes the tool exit 1 (per D26).",
+      "description": "preview-qa.json of comfyui_forge_build_scene_preview.py: a QA envelope plus what the page contains and the --verify result. A published report whose status is fail makes the tool exit 1 (per D26).",
       "allOf": [{"$ref": "common.schema.json#/$defs/qaEnvelope"}],
       "required": ["schema", "preview", "warnings", "verify"],
       "properties": {

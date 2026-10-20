@@ -1,6 +1,6 @@
 # Tiles and maps: autotile_build
 
-`scripts/autotile_build.py` turns a material spec (JSON text you write) into seam-proven tilesets: Wang-16 corner sets, three-material corner sets (81 tiles, so a road can meet water), blob-47 overlays, bevelled blocks and plain fills. The art is code-drawn, no image model; say so when you hand it over (`art_source: "code"` is written into every manifest and into `codeart-meta.json`).
+`scripts/comfyui_forge_autotile_build.py` turns a material spec (JSON text you write) into seam-proven tilesets: Wang-16 corner sets, three-material corner sets (81 tiles, so a road can meet water), blob-47 overlays, bevelled blocks and plain fills. The art is code-drawn, no image model; say so when you hand it over (`art_source: "code"` is written into every manifest and into `codeart-meta.json`).
 
 Use it for tile topology and terrain transitions in maps: shores, paths, cliffs and blocks whose seams must be exact and whose collision comes from data. Use an image route for painterly or richly textured ground; an image texture can still be cut by these masks (`--material-texture`, below).
 
@@ -10,19 +10,19 @@ Commands are single lines run from your project root. `<skill-dir>` is the codea
 
 Build the shore and path example exactly as the roadmap gate runs it:
 
-    python "<skill-dir>/scripts/autotile_build.py" --material-spec "<skill-dir>/examples/water-grass.material.json" --kind both --tile-size 16 --variants 4 --output-dir out/tiles-v1 --preview-map 24x16 --max-repetition 0.35 --strict-qc
+    python "<skill-dir>/scripts/comfyui_forge_autotile_build.py" --material-spec "<skill-dir>/examples/water-grass.material.json" --kind both --tile-size 16 --variants 4 --output-dir out/tiles-v1 --preview-map 24x16 --max-repetition 0.35 --strict-qc
 
 Build every set of the three-material example (water, grass and dirt corners; a dirt path overlay; stone blocks; plain grass):
 
-    python "<skill-dir>/scripts/autotile_build.py" --material-spec "<skill-dir>/examples/dirt-path.material.json" --output-dir out/tiles-v2 --strict-qc
+    python "<skill-dir>/scripts/comfyui_forge_autotile_build.py" --material-spec "<skill-dir>/examples/dirt-path.material.json" --output-dir out/tiles-v2 --strict-qc
 
 Iterate on art quickly, then run the full proof before shipping (a draft is published with `seamless_verified: false`):
 
-    python "<skill-dir>/scripts/autotile_build.py" --material-spec my-tiles.material.json --output-dir out/tiles-draft --skip-seam-proof
+    python "<skill-dir>/scripts/comfyui_forge_autotile_build.py" --material-spec my-tiles.material.json --output-dir out/tiles-draft --skip-seam-proof
 
 Fill a material with a one-tile image that wraps seamlessly (for example a texture from an image tool), snapped to the material's ramp:
 
-    python "<skill-dir>/scripts/autotile_build.py" --material-spec my-tiles.material.json --material-texture grass=textures/grass16.png --quantize-textures --output-dir out/tiles-textured --strict-qc
+    python "<skill-dir>/scripts/comfyui_forge_autotile_build.py" --material-spec my-tiles.material.json --material-texture grass=textures/grass16.png --quantize-textures --output-dir out/tiles-textured --strict-qc
 
 Success prints one ASCII line of JSON: `status`, `output`, `metadata` (codeart-meta.json), `qa` (autotile-qa.json), `tilesets` (one manifest per set), `preview`, per-set `seamless_verified`, `pixels_compared`, `mismatches` and `repetition_index`, the overall `repetition_index` and `failed_checks`. Errors print `error: ...` on stderr and exit 1; a wrong argument is a usage error (argparse's `usage: ...` and exit 2). The material spec may be saved with a UTF-8 BOM. `--output-dir` must not exist; nothing is written until every check has run, and with `--strict-qc` a failed check publishes nothing. Without `--strict-qc` a failing result is published for inspection and the tool still exits 1 after its summary line, with `error: published with QA status fail: <check ids> (see autotile-qa.json)`; exit 0 means pass or warn.
 
@@ -142,7 +142,7 @@ Per tile in the manifest:
 - Wang: `wang` = corner material indices `[top_left, top_right, bottom_left, bottom_right]` (indices into `materials`).
 - Blob and bevel: `blob_mask` sets bit i for neighbour i of N, NE, E, SE, S, SW, W, NW (blob diagonals count only when both neighbouring sides are set; bevel uses the four sides only).
 - `wangid`: Tiled order top, top-right, right, bottom-right, bottom, bottom-left, left, top-left, with colour ids from `wangset.colors` (1-based). Corner sets use the corner positions; blob sets are mixed sets with two colours (1 = under, 2 = fill, never 0, so the isolated tile is not mistaken for an unassigned one); bevel sets are edge sets (1 = open, 2 = solid).
-- `variant`, `collision` (rectangles in tile pixels), `properties.walkable`. For tile maps this per-tile collision is the authoritative terrain collision: every reader of a map bundle (generate2dmap map_nav.py and exporters, codeart2d layout_build, the scene runtime) moves these shapes onto each placed tile, so a Tiled export and the bundle agree near shores.
+- `variant`, `collision` (rectangles in tile pixels), `properties.walkable`. For tile maps this per-tile collision is the authoritative terrain collision: every reader of a map bundle (generate2dmap comfyui_forge_map_nav.py and exporters, codeart2d layout_build, the scene runtime) moves these shapes onto each placed tile, so a Tiled export and the bundle agree near shores.
 
 ## Repetition
 
@@ -159,4 +159,4 @@ The repetition index is the luminance correlation of a 13x13 single-material are
 
 ## Next steps
 
-Feed the manifests to the map tools: a code-made layout ([layout_build.py](layouts-and-parallax.md)) places these tiles on a vertex grid and writes map_bundle.v2 whose terrain collision is these tiles' own collision, then the generate2dmap exporters write Tiled, Godot or LDtk files.
+Feed the manifests to the map tools: a code-made layout ([comfyui_forge_layout_build.py](layouts-and-parallax.md)) places these tiles on a vertex grid and writes map_bundle.v2 whose terrain collision is these tiles' own collision, then the generate2dmap exporters write Tiled, Godot or LDtk files.

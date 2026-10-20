@@ -1,14 +1,14 @@
 # FX language: code-drawn game effects
 
-Use `scripts/fx_build.py` for slashes, sparks, impact rings, hit flashes, dust and projectile loops: the strongest code-art category, because timing, alpha, palette and resolution are all exact. Claude writes one `codeart2d.fx.v1` JSON spec; the script bakes frames with an exact palette, a hit event on the impact frame, a clips manifest and, on request, the fx.v1 runtime module that draws the same effect live on a canvas (see [fx-runtime-contract.md](fx-runtime-contract.md)). Code-drawn, no image model: say so when you deliver.
+Use `scripts/comfyui_forge_fx_build.py` for slashes, sparks, impact rings, hit flashes, dust and projectile loops: the strongest code-art category, because timing, alpha, palette and resolution are all exact. Claude writes one `codeart2d.fx.v1` JSON spec; the script bakes frames with an exact palette, a hit event on the impact frame, a clips manifest and, on request, the fx.v1 runtime module that draws the same effect live on a canvas (see [fx-runtime-contract.md](fx-runtime-contract.md)). Code-drawn, no image model: say so when you deliver.
 
 Realistic fire, smoke and water belong to the video route. The worked example is `examples/slash.fx.json` (slash, impact, dust and orb effects).
 
 ## Commands
 
 ```text
-python "<skill-dir>/scripts/fx_build.py" --spec slash.fx.json --output-dir out/fx-slash-v1 --route pixel --build-clips --export-runtime --strict-qc
-python "<skill-dir>/scripts/fx_build.py" --spec slash.fx.json --output-dir out/fx-hd --route vector --zoom 4 --effects slash,impact
+python "<skill-dir>/scripts/comfyui_forge_fx_build.py" --spec slash.fx.json --output-dir out/fx-slash-v1 --route pixel --build-clips --export-runtime --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_fx_build.py" --spec slash.fx.json --output-dir out/fx-hd --route vector --zoom 4 --effects slash,impact
 node "<skill-dir>/scripts/fx_verify.mjs" out/fx-slash-v1/fx-runtime.mjs --report out/fx-slash-v1/fx-verify-again.json
 ```
 
@@ -19,10 +19,10 @@ In Claude Code `<skill-dir>` is `${CLAUDE_SKILL_DIR}`. On success one JSON line 
 | `--route pixel` (default) | Exact palette, alpha 0 or 255: `codeart_core.pixel_finish` per run of same-coloured shapes, optional 1 px outline. |
 | `--route vector` | The same shapes anti-aliased at an integer `--zoom` (default 4). |
 | `--effects a,b` | Bake only these effects. |
-| `--build-clips` | Run the sibling `comfyui-forge-generate2dsprite/scripts/build_animation_clips.py` by path into `compiled-clips/`. |
+| `--build-clips` | Run the sibling `comfyui-forge-generate2dsprite/scripts/comfyui_forge_build_animation_clips.py` by path into `compiled-clips/`. |
 | `--export-runtime` | Also write `fx-runtime.mjs` and, when node is on PATH, check it with fx_verify.mjs into `fx-verify.json` (`--no-verify` skips that). |
 | `--margin 1`, `--seam-range 0.8,1.25` | Transparent margin in canvas pixels; loop seam band (warning only for FX). |
-| `--clips-schema v1\|v2`, `--ss`, `--coverage`, `--backend` | As in rig_animate.py. |
+| `--clips-schema v1\|v2`, `--ss`, `--coverage`, `--backend` | As in comfyui_forge_rig_animate.py. |
 
 ## The spec
 

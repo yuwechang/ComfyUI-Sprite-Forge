@@ -48,7 +48,7 @@ Name legs by depth: NEAR is the leg closer to the camera, FAR the one behind. Ce
 
 ### Leave room for the whole action
 
-Reserve about 15% clear padding on every side of each cell around the **whole action envelope**: tail, ears, limbs and held equipment. If the envelope is too large, reduce one shared scale; never shrink only the widest pose. A tail or boot can still cross an invisible grid line in an orderly-looking sheet. `assemble_frames.py` checks for that before slicing and can keep the overflowing component whole (`--slice ownership`); see [frames-and-clips.md](frames-and-clips.md). [prompt-rules.md](prompt-rules.md) covers recovery.
+Reserve about 15% clear padding on every side of each cell around the **whole action envelope**: tail, ears, limbs and held equipment. If the envelope is too large, reduce one shared scale; never shrink only the widest pose. A tail or boot can still cross an invisible grid line in an orderly-looking sheet. `comfyui_forge_assemble_frames.py` checks for that before slicing and can keep the overflowing component whole (`--slice ownership`); see [frames-and-clips.md](frames-and-clips.md). [prompt-rules.md](prompt-rules.md) covers recovery.
 
 ## Timing in ticks
 

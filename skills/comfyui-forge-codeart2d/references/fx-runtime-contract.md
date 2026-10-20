@@ -1,6 +1,6 @@
 # fx.v1 runtime contract
 
-An fx.v1 runtime is one dependency-free ES module that draws code-drawn game effects on a Canvas 2D context at any time, deterministically. `fx_build.py --export-runtime` writes it as `fx-runtime.mjs` from a `codeart2d.fx.v1` spec by filling the data block of [runtime/fx-template.mjs](runtime/fx-template.mjs), so the runtime draws exactly the geometry the baked frames show. A hand-written runtime may implement the same contract; `scripts/fx_verify.mjs` checks either kind. See [fx-language.md](fx-language.md) for the spec and the presets.
+An fx.v1 runtime is one dependency-free ES module that draws code-drawn game effects on a Canvas 2D context at any time, deterministically. `comfyui_forge_fx_build.py --export-runtime` writes it as `fx-runtime.mjs` from a `codeart2d.fx.v1` spec by filling the data block of [runtime/fx-template.mjs](runtime/fx-template.mjs), so the runtime draws exactly the geometry the baked frames show. A hand-written runtime may implement the same contract; `scripts/fx_verify.mjs` checks either kind. See [fx-language.md](fx-language.md) for the spec and the presets.
 
 Use baked frames for pixel-art games (exact palette, alpha 0 or 255, nearest sampling). Use the runtime when effects must follow gameplay timing at any frame rate, mirror per attacker, vary per hit, or draw at HD scale (canvas paths are anti-aliased).
 
@@ -70,7 +70,7 @@ Node 18 or newer, no packages. The verifier scans the source (comments ignored),
 | `fullscreen_flash` | An opaque fill covers half the viewport for more than 10 consecutive ticks. |
 | `thin_strokes`, `reach`, `op_budget` (warnings) | A stroke is under 1 device px; the impact is drawn more than 300 px from the anchor; more than 2000 paints in one call. |
 
-Not proven: pixels (the recording context does not rasterize), frame time on real devices, and equality with the baked frames (the tests compare `shapes()` with fx_build.py's geometry).
+Not proven: pixels (the recording context does not rasterize), frame time on real devices, and equality with the baked frames (the tests compare `shapes()` with comfyui_forge_fx_build.py's geometry).
 
 ## Embedding
 

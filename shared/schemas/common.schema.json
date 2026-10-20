@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/0x0funky/agent-sprite-forge/main/shared/schemas/common.schema.json",
   "title": "Agent Sprite Forge shared contract types",
-  "description": "Frozen contracts, version 1. Building blocks referenced by the sprite, video, map, codeart and media schemas. Canonical copy in shared/schemas; tools/vendor_sync.py copies it byte for byte into skills/*/references/schemas. Objects stay open (additionalProperties true): producers may add optional fields. Pixel boxes are half-open [x0, y0, x1, y1); paths are manifest-relative POSIX.",
+  "description": "Frozen contracts, version 1. Building blocks referenced by the sprite, video, map, codeart and media schemas. Canonical copy in shared/schemas; tools/comfyui_forge_vendor_sync.py copies it byte for byte into skills/*/references/schemas. Objects stay open (additionalProperties true): producers may add optional fields. Pixel boxes are half-open [x0, y0, x1, y1); paths are manifest-relative POSIX.",
   "$defs": {
     "sha256": {
       "description": "Lowercase hexadecimal SHA-256 digest.",
@@ -150,11 +150,9 @@
       "anyOf": [{"enum": ["magenta", "green", "blue"]}, {"$ref": "#/$defs/color"}]
     },
     "eventName": {
-      "description": "Gameplay event names shared by clips, selections and runtimes; anything else uses the custom: prefix.",
-      "anyOf": [
-        {"enum": ["in", "tell", "hit", "active_end", "cancel", "chain", "impact", "hold", "end", "sfx", "step_l", "step_r"]},
-        {"type": "string", "pattern": "^custom:\\S+$"}
-      ]
+      "description": "An explicit generic event label; no whitelist or prefix is required.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.:-]*$"
     },
     "fpsValue": {
       "description": "Frame rate as a positive number or an exact rational string such as 24000/1001.",

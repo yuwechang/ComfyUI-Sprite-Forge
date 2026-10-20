@@ -13,7 +13,7 @@ Size is the visible height of the character (outline included), not the canvas.
 |---|---|---|
 | Pixel characters, props and palette variants up to 48 px visible height | best fit when code art is requested or no image route exists: exact grid and palette, free variants, identical root in every action | an image model for rich costume, anatomy, dynamic perspective or a likeness |
 | Pixel characters 49 to 64 px | possible, but shading stays flat and authoring gets long | same as above |
-| Characters above 64 px | not offered as final art | the image route (generate2dmedia `route_media.py`: API key, then local daemon) |
+| Characters above 64 px | not offered as final art | supplied image art processed with generate2dsprite |
 | Flat vector characters, props, UI, HUD icons, 9-slices | when requested: native SVG at any resolution | painterly icons |
 | FX: slashes, sparks, impact rings, projectiles, hit flashes, dust | strongest area: timing, alpha, palette and resolution are exact | realistic fire, smoke or water (video route) |
 | Tile topology (Wang, blob, platform strips), layouts, collision, spawns | yes; these are data | hand-painted materials (procedural texture repeats) |
@@ -44,14 +44,14 @@ stylized code-art alternative.
 3. Pick the representation: PixelSpec for pixel sprites and props, SVG for flat vector
    art and crisp pixel art built from shapes; skeletal SVG rigs and generators for tiles,
    layouts and parallax come with the codeart2d P1 tools.
-4. Write the spec, render it, and open the review sheet from `pixel_qa.py --review`
+4. Write the spec, render it, and open the review sheet from `comfyui_forge_pixel_qa.py --review`
    (1x/2x/4x nearest, light/dark/checker backgrounds, onion skin, palette swatches, QA
    numbers). Fix the text and render again. After three rounds without approval, ask the
    user.
 5. Get the user's approval on the main pose before adding actions, variants and exports.
 
 ```text
-python "<skill-dir>/scripts/pixel_qa.py" --input "out/hero-v1/base/frames/*.png" --palette out/hero-v1/codeart-meta.json --review out/hero-review.png --onion --anchor 16,31 --report out/hero-qa.json
+python "<skill-dir>/scripts/comfyui_forge_pixel_qa.py" --input "out/hero-v1/base/frames/*.png" --palette out/hero-v1/codeart-meta.json --review out/hero-review.png --onion --anchor 16,31 --report out/hero-qa.json
 ```
 
 The numbers catch symptoms (partial alpha, colours outside the palette, outline gaps,

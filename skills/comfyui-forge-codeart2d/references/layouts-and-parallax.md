@@ -4,22 +4,22 @@ Three codeart2d tools make map data and stylised backgrounds as code. None of th
 
 | Tool | Makes | Proves |
 |---|---|---|
-| [layout_build.py](../scripts/layout_build.py) | A playable top-down map: `map-bundle.json` (map_bundle.v2), terrain, props, collision, exits, spawns, previews | Every exit, spawn and interaction is reachable for the actor footprint, judged by the shared forge_nav rules on the bundle's full blocking set; the collision rectangles cover exactly the blocked cells |
-| [parallax_build.py](../scripts/parallax_build.py) | Periodic parallax layers, a parallax plan and a camera sweep | Each repeating layer is exactly periodic and its loop step is at most the p95 of its own column steps; the plan passes the generate2dmap validator |
-| [ambient_bake.py](../scripts/ambient_bake.py) | A frame loop of ripples, haze, swaying foliage or glows on a static plate | The loop has an exact period; pixels outside the effect polygons never change |
+| [comfyui_forge_layout_build.py](../scripts/comfyui_forge_layout_build.py) | A playable top-down map: `map-bundle.json` (map_bundle.v2), terrain, props, collision, exits, spawns, previews | Every exit, spawn and interaction is reachable for the actor footprint, judged by the shared forge_nav rules on the bundle's full blocking set; the collision rectangles cover exactly the blocked cells |
+| [comfyui_forge_parallax_build.py](../scripts/comfyui_forge_parallax_build.py) | Periodic parallax layers, a parallax plan and a camera sweep | Each repeating layer is exactly periodic and its loop step is at most the p95 of its own column steps; the plan passes the generate2dmap validator |
+| [comfyui_forge_ambient_bake.py](../scripts/comfyui_forge_ambient_bake.py) | A frame loop of ripples, haze, swaying foliage or glows on a static plate | The loop has an exact period; pixels outside the effect polygons never change |
 
 Run every command from your project root. `<skill-dir>` is the codeart2d folder (`${CLAUDE_SKILL_DIR}` in Claude Code). Outputs go to a new `--output-dir` inside your project: the tool refuses an existing path, works in a hidden stage folder beside it and publishes only a complete result. With `--strict-qc` a failed check exits 1 and leaves nothing behind; without it the output is published with a failing QA envelope, so you can open the debug images, and the tool still exits 1 after its summary line with `error: published with QA status fail: <check ids> (see <qa file>)`. Exit 0 means pass or warn. Errors print one `error: ...` line and exit 1; a wrong argument is a usage error (argparse's `usage: ...` and exit 2). Success prints one JSON line with the output, metadata and QA paths and `failed_checks`. Spec files may be saved with a UTF-8 BOM.
 
-## Playable maps: layout_build.py
+## Playable maps: comfyui_forge_layout_build.py
 
 ```bash
-python "<skill-dir>/scripts/layout_build.py" --spec meadow-layout.json --output-dir out/map-v1 --seed 7 --preview --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_layout_build.py" --spec meadow-layout.json --output-dir out/map-v1 --seed 7 --preview --strict-qc
 ```
 
-With a corner-Wang tileset (for example from autotile_build.py; repeat `--tiles` for several sets):
+With a corner-Wang tileset (for example from comfyui_forge_autotile_build.py; repeat `--tiles` for several sets):
 
 ```bash
-python "<skill-dir>/scripts/layout_build.py" --spec meadow-layout.json --tiles out/tiles-v1/tileset-manifest.json --output-dir out/map-v2 --seed 7 --preview --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_layout_build.py" --spec meadow-layout.json --tiles out/tiles-v1/tileset-manifest.json --output-dir out/map-v2 --seed 7 --preview --strict-qc
 ```
 
 Start from [examples/meadow-layout.json](../examples/meadow-layout.json): a 40x25-tile village with a pond, a village green, three spline roads leaving the map, three houses with doors, and seeded forest, hedgerow, shore and flower scatter. Its props are inline PixelSpecs, so the map needs no image files.
@@ -34,11 +34,11 @@ Start from [examples/meadow-layout.json](../examples/meadow-layout.json): a 40x2
    `hygiene.saddles` and `hygiene.specks` switch the last two off.
 3. **Tiles.** Every cell gets exactly one tile, from the first tileset that has its corner tuple. Interior variants are chosen by a seeded hash and avoid repeating the left and upper neighbour. With several tilesets the bundle gets one tiles layer per set (`ground`, `ground-<id>`), each cell in exactly one of them; the tilesets are copied into `tilesets/<id>/`. A copied manifest drops its `qa` reference (the QA file stays with the tileset; the bundle's provenance lists it). Without `--tiles` the ground is a flat-colour image (`ground.png`) and the bundle says `placeholder: true`.
 4. **Props.** Fixed `objects` first, then each `scatter` group (see below).
-5. **Collision.** One blocking set, the same for every reader of the bundle (generate2dmap map_nav.py and the engine exporters, the scene preview and its runtime):
+5. **Collision.** One blocking set, the same for every reader of the bundle (generate2dmap comfyui_forge_map_nav.py and the engine exporters, the scene preview and its runtime):
    - **Terrain.** With tilesets, each placed tile blocks with its own `collision` shapes (a tile with no shapes whose `properties.walkable` is false blocks whole). autotile_build tilesets carry these shapes, measured from the art. A tileset that has none gets the vertex-square rule of your materials (each corner owns its quadrant) written into the bundle's copy. Without tilesets, non-walkable terrain becomes exact rectangle solids in `collision.solids` (the merged vertex squares, per material).
    - **Props.** Each object keeps its prop's footprint as authored (in prop pixels, `basis: prop_px`) with `flip_x` and `scale`; readers mirror and scale it once.
    - **`collision.rects`.** Disjoint rectangles whose union is exactly a raster of `rectCell` px cells: the cells whose centre a blocker covers. `rectCell` defaults to the tile collision grid with tilesets (an autotile_build set's `collision_cell`) and to half a tile without, so the rects are exact on the terrain and approximate only prop footprints. They are part of the blocking set too.
-6. **Reachability**, with the shared forge_nav rules (the code generate2dmap's map_nav.py runs) on the blocking set read back from the bundle. A point is valid when it and 8 samples of the actor ellipse (`rx = r`, `ry = r * ySquash`) lie inside the map and outside every blocker (a boundary counts as blocked). Validity is tested at grid nodes (`cell = max(1, round_half_up(r / 2))`); a 4-neighbour move is open when the straight segment between the two nodes stays clear, thin walls between samples included. Every exit, spawn and interaction must be reachable from the first spawn (or, without spawns, from the first exit's arrival point).
+6. **Reachability**, with the shared forge_nav rules (the code generate2dmap's comfyui_forge_map_nav.py runs) on the blocking set read back from the bundle. A point is valid when it and 8 samples of the actor ellipse (`rx = r`, `ry = r * ySquash`) lie inside the map and outside every blocker (a boundary counts as blocked). Validity is tested at grid nodes (`cell = max(1, round_half_up(r / 2))`); a 4-neighbour move is open when the straight segment between the two nodes stays clear, thin walls between samples included. Every exit, spawn and interaction must be reachable from the first spawn (or, without spawns, from the first exit's arrival point).
 7. **Output**, staged and published together (see below).
 
 ### Spec (`codeart2d.layout_spec.v1`)
@@ -87,12 +87,12 @@ Terrain shapes use tile (vertex) coordinates; everything else is in world pixels
 | `enclosed_pockets` (warn) | walkable areas of 8 or more cells cannot be reached |
 | `prop_variety`, `scatter_filled`, `hygiene_converged` (warn) | repeated looks, fewer props than requested, or hygiene still changing after 10 passes |
 
-The terrain, tile and footprint shapes are exact; an engine that collides with `collision.rects` alone gets the `rectCell` approximation of prop footprints, and the reachability proof covers both. generate2dmap's map_nav.py reads the bundle with the same rules and finds the same valid and reachable nodes; run it for the navigation grid, then use export_tiled.py and the Godot or LDtk exporters for engines.
+The terrain, tile and footprint shapes are exact; an engine that collides with `collision.rects` alone gets the `rectCell` approximation of prop footprints, and the reachability proof covers both. generate2dmap's comfyui_forge_map_nav.py reads the bundle with the same rules and finds the same valid and reachable nodes; run it for the navigation grid, then use comfyui_forge_export_tiled.py and the Godot or LDtk exporters for engines.
 
-## Parallax backgrounds: parallax_build.py
+## Parallax backgrounds: comfyui_forge_parallax_build.py
 
 ```bash
-python "<skill-dir>/scripts/parallax_build.py" --spec parallax-gen.json --output-dir out/bg-v1 --validate --sweep-frames 49
+python "<skill-dir>/scripts/comfyui_forge_parallax_build.py" --spec parallax-gen.json --output-dir out/bg-v1 --validate --sweep-frames 49
 ```
 
 Start from [examples/parallax-gen.json](../examples/parallax-gen.json): a dithered dusk sky with stars, pink clouds, a far ridge, a forested mid ridge and a grassy foreground, all pixel art.
@@ -116,15 +116,15 @@ Every non-sky layer needs `scroll` (its camera factor: about 0.1 to 0.3 far, 0.5
 - **Exact periodicity.** Ridge lines use a wrapping noise lattice, and trees, clouds, stars and grass are drawn at periodic distances. Each repeating layer is rendered again twice as wide and must equal itself tiled twice: the `periodic:<layer>` check counts differing pixels, which must be 0.
 - **Calm origin and loop step.** The layer is rolled so that its wrap falls on its smallest column step. `loop_step:<layer>` is forge_core.seam_report over the columns, and the wrap step must be at most the p95 of the column steps. Image layers are measured too, never repaired.
 - **Coverage.** Canvases are sized from the camera envelope: taller for a vertical camera range or a zoom below 1, wider for a non-repeating layer. The plan keeps the viewport alignment through `offset`, uses one uniform scale, a top-left `camera.pivot` and `require_canvas_coverage: true`.
-- **Validator.** The sibling generate2dmap validate_parallax.py checks the plan: alpha, one opaque sky, and coverage at every camera and zoom extreme. Its report is written to `validate-parallax.json` with plan-relative image names. `--validate` requires the validator. By default it runs when generate2dmap is installed beside codeart2d; `--validator PATH` points elsewhere; `--no-validate` skips it, and the check is then marked skipped.
+- **Validator.** The sibling generate2dmap comfyui_forge_validate_parallax.py checks the plan: alpha, one opaque sky, and coverage at every camera and zoom extreme. Its report is written to `validate-parallax.json` with plan-relative image names. `--validate` requires the validator. By default it runs when generate2dmap is installed beside codeart2d; `--validator PATH` points elsewhere; `--no-validate` skips it, and the check is then marked skipped.
 - **Sweep.** `sweep_frames` frames run from the camera minimum to its maximum, at the widest zoom and integer pixel positions. They are written as `sweep-sheet.png` and an animated `sweep.webp`. Checks: no transparent pixel in any frame, and every coverage-required layer covers every frame.
 
 Outputs: one PNG per layer, `parallax-plan.json` (map parallax_plan, with each layer's `sha256` and `kind`), `validate-parallax.json`, the sweep, `parallax-qa.json` and `codeart-meta.json`. The engine must use the same transform: `screenTopLeft = (offset - anchor_px * scale - camera * scroll_factor) * zoom`. Check sub-pixel scrolling, culling and other camera transforms in the engine.
 
-## Ambient loops on plates: ambient_bake.py
+## Ambient loops on plates: comfyui_forge_ambient_bake.py
 
 ```bash
-python "<skill-dir>/scripts/ambient_bake.py" --plate art/harbor-plate.png --spec plate-effects.json --output-dir out/harbor-ambient-v1 --preview --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_ambient_bake.py" --plate art/harbor-plate.png --spec plate-effects.json --output-dir out/harbor-ambient-v1 --preview --strict-qc
 ```
 
 Start from [examples/plate-effects.json](../examples/plate-effects.json). Its polygons are UV fractions, so it runs on any plate. It has rippling harbour water, swaying reeds, chimney haze and a pulsing lantern, plus a protected boat.

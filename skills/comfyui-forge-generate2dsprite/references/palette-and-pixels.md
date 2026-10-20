@@ -2,14 +2,14 @@
 
 Use this reference when sprites must share one game palette, when an image-model result should become strict pixel art, when a clip flickers between palette colours, or when an engine wants palette swaps (hit flash, frozen, team colours). Two tools cover it:
 
-- [`palette_tool.py`](../scripts/palette_tool.py): `build`, `apply`, `lock`, `luts`, `variants` and `quantize-seq`.
-- [`pixel_reduce.py`](../scripts/pixel_reduce.py): image on a clean integer grid -> logical pixels.
+- [`comfyui_forge_palette_tool.py`](../scripts/comfyui_forge_palette_tool.py): `build`, `apply`, `lock`, `luts`, `variants` and `quantize-seq`.
+- [`comfyui_forge_pixel_reduce.py`](../scripts/comfyui_forge_pixel_reduce.py): image on a clean integer grid -> logical pixels.
 
-Both are built on the shared OKLab library `scripts/forge_palette.py`. Run every command from the project root. `<skill-dir>` is this skill's folder (`${CLAUDE_SKILL_DIR}` in Claude Code). Outputs always go to a new `--output-dir` inside the project. Work is staged and published only when its QA passes, so a failed or refused run leaves nothing behind. Each run prints one JSON line naming the folder and its metadata file.
+Both are built on the shared OKLab library `scripts/comfyui_forge_palette.py`. Run every command from the project root. `<skill-dir>` is this skill's folder (`${CLAUDE_SKILL_DIR}` in Claude Code). Outputs always go to a new `--output-dir` inside the project. Work is staged and published only when its QA passes, so a failed or refused run leaves nothing behind. Each run prints one JSON line naming the folder and its metadata file.
 
 ## Rules that do not change
 
-- Image outputs are 8-bit RGBA PNGs with binary alpha and RGB zeroed under alpha 0. They are valid input for `build_animation_clips.py`.
+- Image outputs are 8-bit RGBA PNGs with binary alpha and RGB zeroed under alpha 0. They are valid input for `comfyui_forge_build_animation_clips.py`.
 - Indexed PNGs are written only with `--indexed`, into an `indexed/` subfolder. They are an engine export and are **never builder input**.
 - Colours are compared in OKLab. A distance (dE) of 0.02 is about one visible step. Exact palette colours always keep their index.
 - Palettes are ordered: a colour's position is its index in indexed files and LUTs. `palette.json` (`generate2dsprite.palette.v1`, see [the sprite schema](schemas/sprite.schema.json)) is the authoritative file. The `.gpl`, `.hex` and `.pal` files carry colours only.
@@ -18,13 +18,13 @@ Both are built on the shared OKLab library `scripts/forge_palette.py`. Run every
 
 A prompt such as "32x32 pixel art" does not make an image-model result a 32x32 sprite. Such results are usually painterly, with soft edges and thousands of colours: the 2026-10-05 fox sheet has about 70,000 visible colours and no grid. Decide the logical size before generating: the body height in game pixels and the display scale.
 
-- If the result really sits on an integer grid (a nearest-upscaled render, or a model that respected the grid), reduce it with `pixel_reduce.py`.
-- If it does not, `pixel_reduce.py` refuses with `no clean grid` and the numbers it measured. Keep the art at its resolution and quantize it with `palette_tool.py apply`, or regenerate. `--force --period N` reduces it anyway, but the result is lossy, marked `warn`, and needs a visual check.
+- If the result really sits on an integer grid (a nearest-upscaled render, or a model that respected the grid), reduce it with `comfyui_forge_pixel_reduce.py`.
+- If it does not, `comfyui_forge_pixel_reduce.py` refuses with `no clean grid` and the numbers it measured. Keep the art at its resolution and quantize it with `comfyui_forge_palette_tool.py apply`, or regenerate. `--force --period N` reduces it anyway, but the result is lossy, marked `warn`, and needs a visual check.
 
 ```text
-python "<skill-dir>/scripts/pixel_reduce.py" --input output/hero/hero-6x.png --upscale 6 --output-dir output/hero/1x
-python "<skill-dir>/scripts/pixel_reduce.py" --input output/hero/hero-6x.png --palette output/palette/palette.json --output-dir output/hero/1x-locked
-python "<skill-dir>/scripts/pixel_reduce.py" --input output/raw/fox.png --force --period 8 --output-dir output/fox/forced-8px
+python "<skill-dir>/scripts/comfyui_forge_pixel_reduce.py" --input output/hero/hero-6x.png --upscale 6 --output-dir output/hero/1x
+python "<skill-dir>/scripts/comfyui_forge_pixel_reduce.py" --input output/hero/hero-6x.png --palette output/palette/palette.json --output-dir output/hero/1x-locked
+python "<skill-dir>/scripts/comfyui_forge_pixel_reduce.py" --input output/raw/fox.png --force --period 8 --output-dir output/fox/forced-8px
 ```
 
 How the grid is judged:
@@ -50,8 +50,8 @@ QA (`pixel-reduce-qa.json`, a common QA envelope):
 ## 2. Build a palette
 
 ```text
-python "<skill-dir>/scripts/palette_tool.py" build --input output/hero/frames --colors 16 --output-dir output/palette
-python "<skill-dir>/scripts/palette_tool.py" build --input output/hero/frames output/enemy/frames --colors 32 --reserve "#1a1c2c" "#f4f4f4" --balance --name game --output-dir output/palette
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" build --input output/hero/frames --colors 16 --output-dir output/palette
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" build --input output/hero/frames output/enemy/frames --colors 32 --reserve "#1a1c2c" "#f4f4f4" --balance --name game --output-dir output/palette
 ```
 
 - `build` runs a deterministic weighted k-means++ in OKLab over the unique colours of every pixel with alpha >= 128. The same inputs and `--seed` give the same bytes.
@@ -64,10 +64,10 @@ python "<skill-dir>/scripts/palette_tool.py" build --input output/hero/frames ou
 ## 3. Apply, lock and grow without churn
 
 ```text
-python "<skill-dir>/scripts/palette_tool.py" apply --palette output/palette/palette.json --input output/hero/frames --output-dir output/hero/on-palette
-python "<skill-dir>/scripts/palette_tool.py" lock --palette output/palette/palette.json --source output/hero/frames --output-dir output/palette-lock
-python "<skill-dir>/scripts/palette_tool.py" build --base output/palette-lock/palette.json --input output/enemy/frames --colors 24 --output-dir output/palette-v2
-python "<skill-dir>/scripts/palette_tool.py" apply --palette output/palette-v2/palette.json --lock output/palette-lock/palette-lock.json --input output/hero/frames --output-dir output/hero/on-palette-v2
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" apply --palette output/palette/palette.json --input output/hero/frames --output-dir output/hero/on-palette
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" lock --palette output/palette/palette.json --source output/hero/frames --output-dir output/palette-lock
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" build --base output/palette-lock/palette.json --input output/enemy/frames --colors 24 --output-dir output/palette-v2
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" apply --palette output/palette-v2/palette.json --lock output/palette-lock/palette-lock.json --input output/hero/frames --output-dir output/hero/on-palette-v2
 ```
 
 `apply` snaps every pixel to its OKLab-nearest colour and makes alpha binary at `--alpha-threshold` (128).
@@ -86,7 +86,7 @@ The transparent index is 255 by default. Index maps and indexed PNGs then keep w
 
 ## 4. Indexed export
 
-`apply --indexed`, `quantize-seq --indexed` and `pixel_reduce.py --indexed` write `indexed/<name>.png`:
+`apply --indexed`, `quantize-seq --indexed` and `comfyui_forge_pixel_reduce.py --indexed` write `indexed/<name>.png`:
 
 - PLTE holds the palette; tRNS gives one transparent index alpha 0.
 - The bit depth follows the PLTE length (1, 2, 4 or 8 bits), and there are no metadata chunks.
@@ -94,13 +94,13 @@ The transparent index is 255 by default. Index maps and indexed PNGs then keep w
 
 With index 255 the PLTE has 256 entries, about 1 KB, so a single tiny sprite can be larger than its RGBA PNG. Whole sheets come out smaller.
 
-Engines that decode PNGs normally see the same pixels as the RGBA file. Palette-swap shaders read the raw index and look it up in a LUT. Keep feeding the RGBA files to `build_animation_clips.py`.
+Engines that decode PNGs normally see the same pixels as the RGBA file. Palette-swap shaders read the raw index and look it up in a LUT. Keep feeding the RGBA files to `comfyui_forge_build_animation_clips.py`.
 
 ## 5. Clips: temporal hysteresis
 
 ```text
-python "<skill-dir>/scripts/palette_tool.py" quantize-seq --input output/hero/run-frames --palette output/palette/palette.json --loop-policy cycle --output-dir output/hero/run-quantized
-python "<skill-dir>/scripts/palette_tool.py" quantize-seq --input output/slime/idle-frames --colors 12 --loop-policy pingpong --output-dir output/slime/idle-quantized
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" quantize-seq --input output/hero/run-frames --palette output/palette/palette.json --loop-policy cycle --output-dir output/hero/run-quantized
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" quantize-seq --input output/slime/idle-frames --colors 12 --loop-policy pingpong --output-dir output/slime/idle-quantized
 ```
 
 Video frames and image-model frames carry noise, so per-frame nearest-colour quantizing flips pixels between two close palette colours every frame. `quantize-seq` keeps a pixel's previous index while that colour is within the margin of the best match (squared OKLab distance 4e-4, dE 0.02). It keeps the previous opacity while alpha is inside 0.4-0.6. Real changes still switch at once.
@@ -129,8 +129,8 @@ On a real image-to-video clip (the game-opus55 study clip: 25 frames, a 255-colo
 ## 6. LUTs and baked variants
 
 ```text
-python "<skill-dir>/scripts/palette_tool.py" luts --palette output/palette/palette.json --skin-map output/palette/team-blue.json --output-dir output/palette-luts
-python "<skill-dir>/scripts/palette_tool.py" variants --palette output/palette/palette.json --input output/hero/on-palette --variant hitflash frozen silhouette --output-dir output/hero/variants
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" luts --palette output/palette/palette.json --skin-map output/palette/team-blue.json --output-dir output/palette-luts
+python "<skill-dir>/scripts/comfyui_forge_palette_tool.py" variants --palette output/palette/palette.json --input output/hero/on-palette --variant hitflash frozen silhouette --output-dir output/hero/variants
 ```
 
 `luts` writes three files:
@@ -148,4 +148,4 @@ A skin map is a JSON object `{"#from": "#to"}` or `{"index": "#to"}`, or a palet
 - Palettes and grids are deterministic on one machine. Another OS's floating point can flip a pixel that sits exactly between two colours. Exact palette colours never move.
 - The hysteresis numbers come from synthetic noise and one study clip. Check the QA flips on your clip.
 - `frozen` is a fixed tint. Review it in game, as with every variant.
-- Generated art gets its pixel look from the finish (`comfyui-forge-video2dsprite/scripts/finish_frames.py pixel`), not from prompting a logical grid. Logical-resolution choices for code-drawn art belong to codeart2d (last resort). `pixel_reduce.py` is for images that already have a grid.
+- Generated art gets its pixel look from the finish (`comfyui-forge-video2dsprite/scripts/comfyui_forge_finish_frames.py pixel`), not from prompting a logical grid. Logical-resolution choices for code-drawn art belong to codeart2d (last resort). `comfyui_forge_pixel_reduce.py` is for images that already have a grid.

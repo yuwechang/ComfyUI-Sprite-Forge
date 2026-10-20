@@ -1,23 +1,23 @@
 # Engine export and runtime playback
 
-`scripts/export_engine.py` turns built clips (`animation-clips.json` from `build_animation_clips.py`, schema v1 or v2) into engine files: an Aseprite-style JSON atlas, Godot 4 SpriteFrames, and a Godot Sprite3D package. It never changes pixels, timing or the anchor; it only lays them out for each engine and proves the layout by reading it back.
+`scripts/comfyui_forge_export_engine.py` turns built clips (`animation-clips.json` from `comfyui_forge_build_animation_clips.py`, schema v1 or v2) into engine files: an Aseprite-style JSON atlas, Godot 4 SpriteFrames, and a Godot Sprite3D package. It never changes pixels, timing or the anchor; it only lays them out for each engine and proves the layout by reading it back.
 
-> **Not verified in editors.** These exports have not been imported into Aseprite, Godot 4, Phaser, PixiJS or Unity by this skill. `export_engine.py` proves parse-level round trips only (see QA below). Import once by hand in each target engine and check the anchor, timing and loops before calling a pipeline compatible.
+> **Not verified in editors.** These exports have not been imported into Aseprite, Godot 4, Phaser, PixiJS or Unity by this skill. `comfyui_forge_export_engine.py` proves parse-level round trips only (see QA below). Import once by hand in each target engine and check the anchor, timing and loops before calling a pipeline compatible.
 
 ## Commands
 
 Run from the project root. Outputs go to a new directory inside the project; an existing directory is refused.
 
 ```bash
-python "<skill-dir>/scripts/export_engine.py" --clips out/hero-clips/animation-clips.json --target all --output-dir out/hero-engine
-python "<skill-dir>/scripts/export_engine.py" --clips out/hero-clips/animation-clips.json --target aseprite-json --output-dir out/hero-aseprite --sampling nearest
-python "<skill-dir>/scripts/export_engine.py" --clips out/hero-clips/animation-clips.json --target godot-spriteframes --output-dir out/hero-godot --godot-fps 12
-python "<skill-dir>/scripts/export_engine.py" --clips out/hero-clips/animation-clips.json --target godot-sprite3d --output-dir out/hero-3d --world-height 1.7 --billboard fixed-y
+python "<skill-dir>/scripts/comfyui_forge_export_engine.py" --clips out/hero-clips/animation-clips.json --target all --output-dir out/hero-engine
+python "<skill-dir>/scripts/comfyui_forge_export_engine.py" --clips out/hero-clips/animation-clips.json --target aseprite-json --output-dir out/hero-aseprite --sampling nearest
+python "<skill-dir>/scripts/comfyui_forge_export_engine.py" --clips out/hero-clips/animation-clips.json --target godot-spriteframes --output-dir out/hero-godot --godot-fps 12
+python "<skill-dir>/scripts/comfyui_forge_export_engine.py" --clips out/hero-clips/animation-clips.json --target godot-sprite3d --output-dir out/hero-3d --world-height 1.7 --billboard fixed-y
 ```
 
 In Claude Code, `<skill-dir>` is `${CLAUDE_SKILL_DIR}`. On success the tool prints one JSON line with `status`, `output`, `metadata` (the `engine-export.json` path), `targets`, `clips`, `frames` and `pages`. Errors print `error: ...` and exit 1 (a mistyped option exits 2 with argparse's usage line), and nothing is published.
 
-Export the **built** manifest. A clips input manifest (`clips.json`) is refused with a pointer to `build_animation_clips.py`, which resolves names, ticks and pingpong into explicit frames and integer milliseconds first.
+Export the **built** manifest. A clips input manifest (`clips.json`) is refused with a pointer to `comfyui_forge_build_animation_clips.py`, which resolves names, ticks and pingpong into explicit frames and integer milliseconds first.
 
 | Option | Default | Meaning |
 |---|---|---|

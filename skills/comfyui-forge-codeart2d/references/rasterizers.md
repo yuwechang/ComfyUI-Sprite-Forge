@@ -13,7 +13,7 @@ Never use PyMuPDF, skia-python or cairosvg: in the raster tests they ignored cri
 `<style>` rules, clipPath or gradients without reporting an error (PyMuPDF painted
 gradients black; skia ignored bare `href`; cairosvg did not load on Windows).
 
-Rules the library follows ([codeart_core.py](../scripts/codeart_core.py)):
+Rules the library follows ([comfyui_forge_codeart_core.py](../scripts/comfyui_forge_codeart_core.py)):
 
 - A render error never falls through to another backend, so one output never mixes
   renderers. Pick one with `--backend` when you need a specific one.
@@ -29,13 +29,13 @@ Rules the library follows ([codeart_core.py](../scripts/codeart_core.py)):
   there hands off to an open browser session and prints nothing useful. As root on Linux
   (CI containers) it adds `--no-sandbox`.
 - With no backend at all, rendering fails with the pip command above instead of a
-  traceback; `svg_render.py lint` and the PixelSpec tools keep working.
+  traceback; `comfyui_forge_svg_render.py lint` and the PixelSpec tools keep working.
 
 ## Doctor
 
 ```text
-python "<skill-dir>/scripts/svg_render.py" doctor --report out/doctor.json
-python "<skill-dir>/scripts/svg_render.py" doctor --backend resvg_py
+python "<skill-dir>/scripts/comfyui_forge_svg_render.py" doctor --report out/doctor.json
+python "<skill-dir>/scripts/comfyui_forge_svg_render.py" doctor --backend resvg_py
 ```
 
 The doctor renders the conformance corpus on every available backend (or only the

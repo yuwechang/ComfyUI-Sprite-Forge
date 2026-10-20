@@ -9,17 +9,16 @@ better. The generated source stays editable and recoverable.
 
 Accept a master at gameplay size (the RGBA cut-out from `process`), then animate one
 short representative action through [video2dsprite](../../comfyui-forge-video2dsprite/SKILL.md). Use
-a tool the host or daemon actually exposes, or the explicitly selected API route in
-[generate2dmedia](../../comfyui-forge-generate2dmedia/SKILL.md). Do not infer video tools from the
+the local ComfyUI adapter in the sibling generate2dmedia skill. Do not infer video tools from the
 agent brand. If no provider is available, deliver the prepared input and prompt and name
 the missing capability. Never present a returned MP4 as an alpha-ready game element.
 
 ## Registration by construction
 
 Registration is decided before generation, not recovered from bounding boxes afterwards.
-`prepare_i2v_input.py` places the master on the provider canvas at one recorded scale,
+`comfyui_forge_prepare_i2v_input.py` places the master on the provider canvas at one recorded scale,
 with its root on a fixed pixel (640, 620 on 1280x720), and writes that transform into
-`registration_job.json`. `register_clip.py apply` applies its inverse to every frame of
+`registration_job.json`. `comfyui_forge_register_clip.py apply` applies its inverse to every frame of
 the returned clip: one scale, one translation, so crouches, lunges and contact survive
 and the body never pumps in size. A provider that returns another size is absorbed: the
 same aspect is one factor (960x960 from a square input), a 1264x720 reply to 1280x720 is
@@ -29,12 +28,12 @@ Run from the project root; `<video2dsprite-dir>` is the video2dsprite skill fold
 (`${CLAUDE_SKILL_DIR}/../video2dsprite` in Claude Code).
 
 ```bash
-python "<video2dsprite-dir>/scripts/prepare_i2v_input.py" prepare --master art/hero.png --action attack --subject "compact knight with a red scarf" --facing right --output-dir jobs/hero-attack
-python "<video2dsprite-dir>/scripts/register_clip.py" qc --job jobs/hero-attack/registration_job.json --video takes/hero-attack-1.mp4
-python "<video2dsprite-dir>/scripts/register_clip.py" apply --job jobs/hero-attack/registration_job.json --frames work/hero-attack-1/frames-clean --output-dir work/hero-attack-registered
-python "<video2dsprite-dir>/scripts/register_clip.py" profile --registration work/hero-idle-registered/registration.json --id hero --output profiles/hero.json
-python "<video2dsprite-dir>/scripts/register_clip.py" apply --job jobs/hero-walk/registration_job.json --frames work/hero-walk-1/frames-clean --lock feet --character-profile profiles/hero.json --output-dir work/hero-walk-registered
-python "<video2dsprite-dir>/scripts/register_clip.py" validate-profile --profile profiles/hero.json --registration work/hero-idle-registered/registration.json --registration work/hero-walk-registered/registration.json
+python "<video2dsprite-dir>/scripts/comfyui_forge_prepare_i2v_input.py" prepare --master art/hero.png --motion-type TYPE --description DESCRIPTION --subject "compact knight with a red scarf" --facing right --output-dir jobs/motion-input
+python "<video2dsprite-dir>/scripts/comfyui_forge_register_clip.py" qc --job jobs/motion-input/registration_job.json --video takes/hero-attack-1.mp4
+python "<video2dsprite-dir>/scripts/comfyui_forge_register_clip.py" apply --job jobs/motion-input/registration_job.json --frames work/hero-attack-1/frames-clean --output-dir work/hero-attack-registered
+python "<video2dsprite-dir>/scripts/comfyui_forge_register_clip.py" profile --registration work/hero-idle-registered/registration.json --id hero --output profiles/hero.json
+python "<video2dsprite-dir>/scripts/comfyui_forge_register_clip.py" apply --job jobs/hero-walk/registration_job.json --frames work/hero-walk-1/frames-clean --lock feet --character-profile profiles/hero.json --output-dir work/hero-walk-registered
+python "<video2dsprite-dir>/scripts/comfyui_forge_register_clip.py" validate-profile --profile profiles/hero.json --registration work/hero-idle-registered/registration.json --registration work/hero-walk-registered/registration.json
 ```
 
 The full order: plan the key (video2dsprite key-plan), prepare the input, generate,

@@ -3,9 +3,9 @@
 A playable layered map is data, not a picture: a map bundle (`generate2dmap.map_bundle.v2`, see [schemas/map.schema.json](schemas/map.schema.json)) records the base art, tile layers, placed props, collision, portals, spawns, anchors and interactions. Three tools close the loop:
 
 ```bash
-python "<skill-dir>/scripts/map_bundle.py" validate --bundle map/map-bundle.json --report map/qa/bundle-report.json
-python "<skill-dir>/scripts/map_nav.py" check --bundle map/map-bundle.json --output-dir map/qa/nav
-python "<skill-dir>/scripts/export_tiled.py" export --bundle map/map-bundle.json --output-dir map/tiled --embedded-variant
+python "<skill-dir>/scripts/comfyui_forge_map_bundle.py" validate --bundle map/map-bundle.json --report map/qa/bundle-report.json
+python "<skill-dir>/scripts/comfyui_forge_map_nav.py" check --bundle map/map-bundle.json --output-dir map/qa/nav
+python "<skill-dir>/scripts/comfyui_forge_export_tiled.py" export --bundle map/map-bundle.json --output-dir map/tiled --embedded-variant
 ```
 
 Commands run from the project root; outputs stay in the project. In Claude Code `<skill-dir>` is `${CLAUDE_SKILL_DIR}`. Each `--output-dir` must be new; a failed check publishes nothing.
@@ -40,16 +40,16 @@ A fixed scene without independent behavior can remain a complete picture. Do not
 
 ### Where an object's art comes from (D6)
 
-Every reader of bundle objects (`map_bundle.py render`, `export_tiled.py`, the Godot and LDtk exporters, the scene preview and the runtime) looks an object's art up in this order; the first step that names an image decides:
+Every reader of bundle objects (`comfyui_forge_map_bundle.py render`, `comfyui_forge_export_tiled.py`, the Godot and LDtk exporters, the scene preview and the runtime) looks an object's art up in this order; the first step that names an image decides:
 
 1. `objects[].image`: the object's own art, relative to the bundle.
 2. `props[prop]`: the registry entry's `image`, or, for an entry with `pack` and `label`, that accepted prop-pack item's image.
 3. `prop_packs`: the first listed pack manifest with an accepted item whose `label` is the object's `prop`.
 4. `occluder.source`.
 
-A step that names a missing file is an error; it never falls through to the next step. `map_bundle.py validate` lists the objects without any art in one warning, and the render draws nothing for them. `anchor_px` is always the anchor in the unmirrored art.
+A step that names a missing file is an error; it never falls through to the next step. `comfyui_forge_map_bundle.py validate` lists the objects without any art in one warning, and the render draws nothing for them. `anchor_px` is always the anchor in the unmirrored art.
 
-`flip_x: true` mirrors the art around the anchor x: the mirrored image is drawn so that its point `[width - anchor_px[0], anchor_px[1]]` lands on (`x`, `y`). The footprint is mirrored with it (`offset[0]` and `rotate` change sign, rule N6 below), whether it comes from the object or from its prop, so write footprints unmirrored. `export_tiled.py` writes a flipped object with Tiled's horizontal-flip gid bit and a `flipX` property; a composed preview's placements mirror the same way. Mirror only art whose lighting allows it.
+`flip_x: true` mirrors the art around the anchor x: the mirrored image is drawn so that its point `[width - anchor_px[0], anchor_px[1]]` lands on (`x`, `y`). The footprint is mirrored with it (`offset[0]` and `rotate` change sign, rule N6 below), whether it comes from the object or from its prop, so write footprints unmirrored. `comfyui_forge_export_tiled.py` writes a flipped object with Tiled's horizontal-flip gid bit and a `flipX` property; a composed preview's placements mirror the same way. Mirror only art whose lighting allows it.
 
 ### Footprint basis (D7)
 
@@ -80,7 +80,7 @@ These two enums are defined here once; prop packs (`occlusion_class`, `occupant_
 | `static_front` | foreground occluders | always drawn after actors |
 | `static_back` | floor decals, rugs, shadows, low clutter | always drawn before actors |
 
-Any other value is reported by `map_bundle.py validate` as a warning.
+Any other value is reported by `comfyui_forge_map_bundle.py validate` as a warning.
 
 ## Render order
 
@@ -89,15 +89,15 @@ Any other value is reported by `map_bundle.py validate` as a warning.
 3. `static_front` and `foreground` props after every actor; `static_back` props before them.
 4. Effects, UI and debug overlays.
 
-Rule 3 is a runtime duty: no tool here reorders objects by policy. `map_bundle.py render` draws each objects layer in rule 2 order (it proves what the data says, not how an engine sorts), and `export_tiled.py` writes the objects in that order with `occlusion`, `occupantPolicy` and `sortY` properties for the engine to split into its passes. A composed preview gets rule 3 from the placements' `foreground` array.
+Rule 3 is a runtime duty: no tool here reorders objects by policy. `comfyui_forge_map_bundle.py render` draws each objects layer in rule 2 order (it proves what the data says, not how an engine sorts), and `comfyui_forge_export_tiled.py` writes the objects in that order with `occlusion`, `occupantPolicy` and `sortY` properties for the engine to split into its passes. A composed preview gets rule 3 from the placements' `foreground` array.
 
-Tiled's own `topdown` object order sorts by the image bottom, which differs from the ground line whenever the anchor is not on the image's bottom row. `export_tiled.py` therefore writes prop objects already sorted with `draworder: index` and a `sortY` property; engines should sort by `sortY` at run time. Platformers usually need stable render bands rather than sort changes while jumping (see [side-scroll-scenes.md](side-scroll-scenes.md)).
+Tiled's own `topdown` object order sorts by the image bottom, which differs from the ground line whenever the anchor is not on the image's bottom row. `comfyui_forge_export_tiled.py` therefore writes prop objects already sorted with `draworder: index` and a `sortY` property; engines should sort by `sortY` at run time. Platformers usually need stable render bands rather than sort changes while jumping (see [side-scroll-scenes.md](side-scroll-scenes.md)).
 
 ## Placement for a composed preview
 
-`compose_layered_preview.py` draws props, objects, actors and foreground over a base for review. Placements name the image, the world position and the anchor.
+`comfyui_forge_compose_layered_preview.py` draws props, objects, actors and foreground over a base for review. Placements name the image, the world position and the anchor.
 
-Gameplay metadata lives in the map bundle: it is the only collision, occlusion and policy data that `map_nav.py`, the exporters and a runtime read. A placement's own `footprint` and `solid` are preview data: they let the audit judge a composed preview that has no bundle, and the debug overlay draws them. With `--bundle`, actor feet are judged on the bundle's blocking set through forge_nav, exactly as `map_nav.py query` judges them (D4); a bundle forge_nav cannot read stops compose with an error (run `map_bundle.py validate` first), and a bundle without a `collision` block is judged with a point actor (`actorRadius` 0). Placement footprints then block nothing, and an actor standing inside one is reported by the `actor_feet_off_placement_footprints` warning, usually a prop that is missing from the bundle. Placement footprints use the same `basis` names (`prop_px` follows the drawn sprite, `world_px` only `--scale`) and mirror with a placement's `flip_x`.
+Gameplay metadata lives in the map bundle: it is the only collision, occlusion and policy data that `comfyui_forge_map_nav.py`, the exporters and a runtime read. A placement's own `footprint` and `solid` are preview data: they let the audit judge a composed preview that has no bundle, and the debug overlay draws them. With `--bundle`, actor feet are judged on the bundle's blocking set through forge_nav, exactly as `comfyui_forge_map_nav.py query` judges them (D4); a bundle forge_nav cannot read stops compose with an error (run `comfyui_forge_map_bundle.py validate` first), and a bundle without a `collision` block is judged with a point actor (`actorRadius` 0). Placement footprints then block nothing, and an actor standing inside one is reported by the `actor_feet_off_placement_footprints` warning, usually a prop that is missing from the bundle. Placement footprints use the same `basis` names (`prop_px` follows the drawn sprite, `world_px` only `--scale`) and mirror with a placement's `flip_x`.
 
 ```json
 {
@@ -111,7 +111,7 @@ Gameplay metadata lives in the map bundle: it is the only collision, occlusion a
 ```
 
 ```bash
-python "<skill-dir>/scripts/compose_layered_preview.py" --base map-base.png --placements map-placements.json --output assembled.png --resampler nearest --report assembled-report.json --bundle map/map-bundle.json --audit-out assembled-audit.json
+python "<skill-dir>/scripts/comfyui_forge_compose_layered_preview.py" --base map-base.png --placements map-placements.json --output assembled.png --resampler nearest --report assembled-report.json --bundle map/map-bundle.json --audit-out assembled-audit.json
 ```
 
 `anchorPx` is in source pixels. Foreground draws last. A v1 prop pack anchors its props at the art's bottom centre (`extract_prop_pack.read_manifest`). Inspect at gameplay scale with an actor in front of, behind and beside tall props. A PNG verifies composition, not gameplay, occlusion cues or video readiness.
@@ -149,7 +149,7 @@ The same object, as gameplay data in the map bundle, with a mirrored second tree
 
 ## Collision rules
 
-`forge_nav.py` (canonical copy `shared/forge_nav.py`, vendored into this skill's `scripts/` beside the `forge_core.py` it needs) is the one implementation of the map collision rules. `map_nav.py`, the compose audit with `--bundle`, the Tiled, Godot and LDtk exporters, the codeart layout builder and the scene preview all read a bundle's blocking set through it, and [runtime/map-runtime.mjs](runtime/map-runtime.mjs), the JavaScript collision query that the playable scene preview ([scene-preview.md](scene-preview.md)) inlines, mirrors it rule for rule. Its module docstring is the complete rule book (N1 to N15, with the exact arithmetic). These are its rules for the walk area, the blocking set, solids, footprints, materials and one-way platforms, quoted verbatim:
+`comfyui_forge_nav.py` (canonical copy `shared/comfyui_forge_nav.py`, vendored into this skill's `scripts/` beside the `comfyui_forge_core.py` it needs) is the one implementation of the map collision rules. `comfyui_forge_map_nav.py`, the compose audit with `--bundle`, the Tiled, Godot and LDtk exporters, the codeart layout builder and the scene preview all read a bundle's blocking set through it, and [runtime/map-runtime.mjs](runtime/map-runtime.mjs), the JavaScript collision query that the playable scene preview ([scene-preview.md](scene-preview.md)) inlines, mirrors it rule for rule. Its module docstring is the complete rule book (N1 to N15, with the exact arithmetic). These are its rules for the walk area, the blocking set, solids, footprints, materials and one-way platforms, quoted verbatim:
 
 ```text
 N3  Walk area. Without walk regions it is the closed box 0 <= x <= W and 0 <= y <= H.
@@ -172,7 +172,7 @@ N4  The blocking set (D2) is identical for every consumer. It is the union of:
       e. the material-map pixels of a blocking class (N8).
     A shape without area blocks nothing and is dropped, wherever it comes from: a rect with
     w <= 0 or h <= 0, an ellipse with rx <= 0 or ry <= 0, a polygon whose shoelace sum
-    sum(x[i] * y[i + 1]) - sum(y[i] * x[i + 1]) is exactly 0 (map_bundle.py refuses such a
+    sum(x[i] * y[i + 1]) - sum(y[i] * x[i + 1]) is exactly 0 (comfyui_forge_map_bundle.py refuses such a
     polygon outright in collision.solids and in a tileset's tiles[].collision, where it also
     refuses a self-intersecting ring). A point is blocked when it lies in any member. Walk regions
     (N3) bound the walk area; they are not blockers.
@@ -233,19 +233,19 @@ In short, for the rest of the rule book:
 
 - World pixels, y down (N1). The actor's footprint is an ellipse `rx = actorRadius`, `ry = actorRadius * ySquash`; `ySquash` is 1.0 for top-down tiles and about 0.58 for HD-2D plates. A position is valid when its centre and 8 points on that ellipse are all in the walk area and none is blocked (N2, N9).
 - `collision.rects` are exact blocking rectangles (D3), never an approximation of something else. A writer may emit rects that approximate its other solids only if its own reachability proof runs on the full blocking set, which forge_nav gives it.
-- Tile collision (N7, D5): a placed tile blocks with its tileset tile's `collision` shapes (tile pixels), or its whole cell when it has no shapes and `properties.walkable` is false. `export_tiled.py` keeps these shapes in the TSX tilesets.
+- Tile collision (N7, D5): a placed tile blocks with its tileset tile's `collision` shapes (tile pixels), or its whole cell when it has no shapes and `properties.walkable` is false. `comfyui_forge_export_tiled.py` keeps these shapes in the TSX tilesets.
 - Navigation (N10, N12 to N14) uses a grid of `max(1, round(actorRadius / 2))` px. A move between neighbouring cells is open when every sample along it is valid and the actor's centre never crosses a blocker or leaves the walk area, so walls and gaps thinner than a cell are never jumped; touching a vertex, a corner or an ellipse at a single point is not crossing it. A corridor must be wider than `2 * actorRadius + cell` px to be sure to show up on the grid.
 - `one_way` is a side-scroll class (N11, D2): it blocks only moves that drop onto it from above. Bundles carry no view mode, so the rule applies everywhere; top-down maps should not use it.
 - Portal intent, `latch` and `requiresMovement` are runtime duties (N15).
 
 ## QA checklist
 
-- `map_bundle.py validate`: contract, files and sha256, unique ids, tile indices, wang and blob data, portal targets, slots, the art of every object (D6), anchors outside the art and object anchors that differ from their prop's (the prop's footprint would move against the art).
-- `map_nav.py check`: every interaction, exit, anchor slot and approach point reachable from the spawns and arrivals; arrivals outside every trigger; triggers inside the world; links in both directions with `--link other-map.json`. Review `nav-debug.png`: red cells blocked, green reachable, yellow walkable but unreachable, orange thin gaps.
+- `comfyui_forge_map_bundle.py validate`: contract, files and sha256, unique ids, tile indices, wang and blob data, portal targets, slots, the art of every object (D6), anchors outside the art and object anchors that differ from their prop's (the prop's footprint would move against the art).
+- `comfyui_forge_map_nav.py check`: every interaction, exit, anchor slot and approach point reachable from the spawns and arrivals; arrivals outside every trigger; triggers inside the world; links in both directions with `--link other-map.json`. Review `nav-debug.png`: red cells blocked, green reachable, yellow walkable but unreachable, orange thin gaps.
 - No collider is the size of a canopy or a whole image; every solid prop has a footprint; footprints are scaled once and have a known `basis`.
 - Tall props on walkways have an occlusion class and an occupant policy; the occluder cue works over opaque pixels only; the runtime draws `static_front` and `static_back` in their own passes.
 - Compose a preview with a representative actor at gameplay scale, with `--bundle` so the audit judges feet on the bundle's collision.
-- Export with `export_tiled.py` when the target loads Tiled data; the export proves the re-rendered files match the bundle, not that the Tiled editor or an engine imports them (Tiled GUI not verified).
+- Export with `comfyui_forge_export_tiled.py` when the target loads Tiled data; the export proves the re-rendered files match the bundle, not that the Tiled editor or an engine imports them (Tiled GUI not verified).
 - Walk the routes in the actual runtime: in front of and behind props, around corners, over bridges and through portals both ways.
 
 Strategy-level guidance (routes, portals, autotiles, chunks, roads and bridges) is in [map-strategies.md](map-strategies.md); genre presets and engine targets are in [map-presets.md](map-presets.md); prop extraction and anchors are in [prop-pack-contract.md](prop-pack-contract.md); walking a bundle in a browser before exporting it is in [scene-preview.md](scene-preview.md).

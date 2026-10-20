@@ -1,5 +1,5 @@
 // fx.v1 canvas runtime (codeart2d): code-drawn game effects, deterministic, Canvas 2D only.
-// Contract: references/fx-runtime-contract.md. fx_build.py --export-runtime copies this file and
+// Contract: references/fx-runtime-contract.md. comfyui_forge_fx_build.py --export-runtime copies this file and
 // replaces the data block with a normalised codeart2d.fx.v1 spec, so the geometry here is the same
 // geometry the baked frames show. The demo data keeps the template itself runnable and verifiable.
 //

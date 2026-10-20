@@ -3,8 +3,8 @@
 Code-art SVG must render the same in resvg-py, the resvg-js CLI and Chrome/Edge, so the
 art is defined by its text, not by whichever renderer happened to run. The rules below
 are what those renderers agree on in the design raster tests (cases t01 to t17). The
-compiler and lint in [codeart_core.py](../scripts/codeart_core.py) enforce them, and
-[svg_render.py](../scripts/svg_render.py) runs both before it rasterizes anything.
+compiler and lint in [comfyui_forge_codeart_core.py](../scripts/comfyui_forge_codeart_core.py) enforce them, and
+[comfyui_forge_svg_render.py](../scripts/comfyui_forge_svg_render.py) runs both before it rasterizes anything.
 Example: [potion-icons.svg](../examples/potion-icons.svg) with
 [palette.json](../examples/palette.json).
 
@@ -13,7 +13,7 @@ Example: [potion-icons.svg](../examples/potion-icons.svg) with
 | Rule | Why (raster test) |
 |---|---|
 | Root `width`/`height` equal an integer `viewBox`; 1 unit = 1 logical pixel. Scale with `--zoom`, never by changing the root size | t01: every renderer is exact on integer rects at 1x and 4x |
-| Pixel art sets `shape-rendering="crispEdges"` on the root (`svg_render.py render --crisp` adds it when missing) | t03: resvg and the browsers draw crisp shapes without anti-aliased pixels |
+| Pixel art sets `shape-rendering="crispEdges"` on the root (`comfyui_forge_svg_render.py render --crisp` adds it when missing) | t03: resvg and the browsers draw crisp shapes without anti-aliased pixels |
 | Colours come from palette classes: `class="c-NAME"` plus a literal-hex rule `.c-NAME{fill:#rrggbb}`; the compiler writes missing rules from the palette | t16: resvg-py, resvg-js and the browsers apply `<style>` class rules exactly |
 | A palette variant is one extra `<style>` appended at the end that re-declares only the changed classes | t17: the later rule wins in every supported renderer |
 | CSS variables only in source files; the compiler inlines them | t04/t05: only browsers resolve `var()`; the others paint black |
@@ -26,11 +26,11 @@ Example: [potion-icons.svg](../examples/potion-icons.svg) with
 | Numbers are finite decimals; never a Python complex or NaN | fox probe: `61.13-0.00j` from `x ** 0.65` made Chrome silently draw a broken tail |
 | Frames batched into one HTML page get unique ids (`compile_svg(..., id_prefix="f3_")`) | fox probe: a shared clipPath id made frame 2 use frame 0's clip |
 
-Root metadata: `data-anchor="x y"` is the default root for `svg_render.py render` (the
+Root metadata: `data-anchor="x y"` is the default root for `comfyui_forge_svg_render.py render` (the
 `--anchor` option wins); `data-codeart`, `data-facing` and `data-palette` are reserved
 labels that the tools keep but do not interpret.
 
-Rig conventions, used by the skeletal animation tool (rig_animate.py, planned for the
+Rig conventions, used by the skeletal animation tool (comfyui_forge_rig_animate.py, planned for the
 codeart2d P1 release): bones are `<g id="..." data-pivot="x y">`, poses change only their
 `transform` attribute, and slots carry `data-z` so draw order does not follow the bone
 hierarchy.
@@ -63,7 +63,7 @@ complex numbers.
 
 ## Lint codes
 
-`svg_render.py lint` prints one `<code>: <message>` line per problem and exits 1 when
+`comfyui_forge_svg_render.py lint` prints one `<code>: <message>` line per problem and exits 1 when
 there is any. The `portable` profile:
 
 | Code | Problem | Fix |
@@ -72,7 +72,7 @@ there is any. The `portable` profile:
 | `viewbox` | `viewBox` missing, not four numbers, not integers, or not equal to the root `width`/`height` | `width="W" height="H" viewBox="0 0 W H"` with integers |
 | `css-transform` | CSS `transform` or `transform-box` | `transform="rotate(a cx cy)"`, `translate(...)` or `scale(...)` attributes |
 | `transform-origin` | `transform-origin` attribute or property | pivot with `rotate(a cx cy)`, or translate, rotate, translate back |
-| `var` | `var()` left in the SVG | keep variables in sources and render through `svg_render.py` (or `lint --compile`) |
+| `var` | `var()` left in the SVG | keep variables in sources and render through `comfyui_forge_svg_render.py` (or `lint --compile`) |
 | `text` | `<text>`, `<tspan>`, `<textPath>` | convert to paths |
 | `image` | embedded `<image>` | composite raster art in Python |
 | `feTurbulence` | noise filter | bake the noise in code |
@@ -93,8 +93,8 @@ The `pixel` profile (used by `render --crisp`) adds:
 | `opacity` | `opacity`, `fill-opacity` or `stroke-opacity` below 1 | use an opaque palette colour |
 
 ```text
-python "<skill-dir>/scripts/svg_render.py" lint --svg art/potion.svg --profile portable
-python "<skill-dir>/scripts/svg_render.py" lint --svg art/potion.svg --compile --palette art/palette.json --variant mana
+python "<skill-dir>/scripts/comfyui_forge_svg_render.py" lint --svg art/potion.svg --profile portable
+python "<skill-dir>/scripts/comfyui_forge_svg_render.py" lint --svg art/potion.svg --compile --palette art/palette.json --variant mana
 ```
 
 `--compile` lints what render rasterizes (palette applied, `var()` inlined, `<use>`
@@ -110,8 +110,8 @@ expanded) and reports compile errors as `compile:` lines.
 | QA gates | lint only; partial alpha and blended colours are expected | 0 partial-alpha and 0 off-palette pixels (`--strict-qc` publishes nothing otherwise; without it a failing render is published and exits 1) |
 
 ```text
-python "<skill-dir>/scripts/svg_render.py" render --svg art/potion-icons.svg --palette art/palette.json --output-dir out/potions-v1 --zoom 4
-python "<skill-dir>/scripts/svg_render.py" render --svg art/potion-icons.svg --palette art/palette.json --output-dir out/potions-px --crisp --zoom 4 --strict-qc
+python "<skill-dir>/scripts/comfyui_forge_svg_render.py" render --svg art/potion-icons.svg --palette art/palette.json --output-dir out/potions-v1 --zoom 4
+python "<skill-dir>/scripts/comfyui_forge_svg_render.py" render --svg art/potion-icons.svg --palette art/palette.json --output-dir out/potions-px --crisp --zoom 4 --strict-qc
 ```
 
 Each variant gets a folder holding the compiled SVG that was rendered

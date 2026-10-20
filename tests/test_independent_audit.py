@@ -1,0 +1,139 @@
+"""Independent boundary regressions; no network, service lifecycle or GPU use."""
+import copy,json,math,sys,tempfile,unittest
+from pathlib import Path
+from fractions import Fraction
+from unittest.mock import patch
+from PIL import Image
+ROOT=Path(__file__).resolve().parents[1]
+sys.path[:0]=[str(ROOT/'skills/comfyui-forge-video2dsprite/scripts'),str(ROOT/'skills/comfyui-forge-generate2dmedia/scripts')]
+import test_comfyui_media as f
+import comfyui_forge_media as media,comfyui_forge_route_media as router
+import comfyui_forge_contracts as contracts,comfyui_forge_selection_tools as selection
+import comfyui_forge_gait_loop as cycle,comfyui_forge_deliver_animation as delivery
+import comfyui_forge_animation_review as reviewer
+import numpy as np
+from types import SimpleNamespace
+import comfyui_forge_engine_export as engine
+import comfyui_forge_schema as schema
+
+class IndependentTests(unittest.TestCase):
+    def prepare(self,config,graph=None,last=None):
+        return media.prepare(config,graph or f.GRAPH,prompt='requested motion',first='first.png',last=last,width=96,height=64,duration=1.25)
+    def test_optional_bindings_cannot_overwrite_required_values(self):
+        for role,target,last in [('fps',['4','width'],None),('last_image',['1','image'],'last.png')]:
+            config=copy.deepcopy(f.CONFIG);config['bindings'][role]=target
+            with self.subTest(role=role),self.assertRaisesRegex(media.ComfyError,'conflicting'):self.prepare(config,last=last)
+    def test_optional_tail_socket_cannot_delete_an_active_input(self):
+        config=copy.deepcopy(f.CONFIG);config['last_frame_input']=['1','image']
+        with self.assertRaisesRegex(media.ComfyError,'conflicts'):self.prepare(config)
+    def test_disconnected_fps_binding_is_rejected(self):
+        config=copy.deepcopy(f.CONFIG);graph=copy.deepcopy(f.GRAPH)
+        config['bindings']['fps']=['99','unused'];graph['99']['inputs']['unused']=12
+        with self.assertRaisesRegex(media.ComfyError,'does not reach'):self.prepare(config,graph)
+    def test_automatic_seed_detection_cannot_overlap_a_dimension(self):
+        config=copy.deepcopy(f.CONFIG);config['bindings']['width']=['4','seed']
+        graph,_=self.prepare(config)
+        with self.assertRaisesRegex(media.ComfyError,'overlaps'):media.seed_targets(config,graph)
+    def test_readonly_check_and_resolve_use_configured_canvas_rules(self):
+        config=copy.deepcopy(f.CONFIG);config['planning']={'dimension_multiple':64,'minimum_source_size':[1536,640]}
+        with patch.object(media,'load_config',return_value=config),patch.object(media,'load_graph',return_value=f.GRAPH):
+            client=f.FakeClient();checked=media.check(client)
+            self.assertIn('seedBounds',checked)
+            resolved=router.resolve('video');self.assertGreater(resolved.candidates[0].duration,0)
+            self.assertTrue(all(method=='GET' for method,_,_ in client.calls))
+        width,height=media.diagnostic_canvas(config)
+        self.assertEqual((width%64,height%64),(0,0));self.assertGreaterEqual(width,1536)
+    def test_conflicting_tick_and_ms_durations_stop_before_sampling(self):
+        value={'indices':[0,1],'durations':[500,500],'start':0,'endExclusive':2,
+               'raw':{'ticks':[1,1],'tickHz':24,'events':[]}}
+        with self.assertRaisesRegex(ValueError,'disagree'):selection.playback_plan(value,8,'hold')
+        for raw in [{'ticks':[1,1]},{'tickHz':24},{'ticks':[1,True],'tickHz':2}]:
+            with self.subTest(raw=raw),self.assertRaises(ValueError):contracts.timeline([500,500],raw)
+    def test_conflicting_event_clocks_and_nonfinite_times_are_rejected(self):
+        for event in [{'name':'signal','tick':1,'atMs':900},{'name':'signal','atMs':float('nan')},{'name':'signal','tick':True}]:
+            with self.subTest(event=event),self.assertRaises(ValueError):contracts.timeline([500,500],{'ticks':[1,1],'tickHz':2,'events':[event]})
+        contracts.timeline([42,41,42],{'ticks':[1,1,1],'tickHz':24,'events':[{'name':'signal','tick':1,'atMs':42}]})
+    def test_selection_reader_also_rejects_inconsistent_clocks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'selection.json'
+            path.write_text(json.dumps({'schema':cycle.SELECTION_V2,'sourceDirectory':'frames','start':0,'endExclusive':2,
+             'sourceHashes':['a'*64,'b'*64],'sourceIndices':[0,1],'durations_ms':[500,500],
+             'loopPolicy':'oneshot','ticks':[1,1],'tickHz':24,'events':[]}))
+            with self.assertRaisesRegex(ValueError,'disagree'):cycle.read_selection(path)
+    def test_resource_reduction_has_an_impossibility_exit(self):
+        with patch.dict('os.environ',{'COMFYUI_FORGE_ANALYSIS_MEMORY_MB':'1'}):
+            with self.assertRaisesRegex(ValueError,'minimum reduced-frame storage'):cycle._reduction_factor((32,32),65537)
+            factor=cycle._reduction_factor((128,128),65536)
+            self.assertLessEqual(65536*math.ceil(128/factor)**2*4,1024**2//4)
+    def test_auxiliary_reviewer_checks_budget_before_loading_frames(self):
+        with patch.dict('os.environ',{'COMFYUI_FORGE_ANALYSIS_MEMORY_MB':'1'}):
+            with patch.object(reviewer.Image,'open',side_effect=AssertionError('must budget before reading')):
+                with self.assertRaisesRegex(ValueError,'memory budget'):reviewer.features([Path('unused')]*5)
+    def test_reviewer_retains_best_recurrence_for_each_duration(self):
+        values=np.array([0,1,0,-1]*8,np.float32).reshape(-1,1,1,1)
+        candidates=reviewer.candidates(values,2,12)
+        self.assertTrue(candidates)
+        lengths=[row['frameCount'] for row in candidates]
+        self.assertEqual(len(lengths),len(set(lengths)))
+        self.assertTrue(any(length%4==0 for length in lengths))
+    def test_invalid_server_schema_has_a_clear_pre_submission_error(self):
+        with self.assertRaisesRegex(media.ComfyError,'JSON object'):media.seed_bounds(f.GRAPH,[('4','seed')],[])
+    def test_generic_events_agree_in_advanced_export_and_schema(self):
+        schemas=schema.SchemaSet(ROOT/'shared/schemas')
+        for label in ['signal-ready','phase.2','marker','custom:existing']:
+            event={'name':label,'atMs':125}
+            self.assertEqual(engine._event_list([event],1000,'selection'),[event])
+            self.assertEqual(schemas.errors(event,'video.schema.json#/$defs/videoEvent'),[])
+        self.assertEqual(engine.LOOP_POLICIES,('cycle','oneshot'))
+        self.assertFalse(hasattr(engine,'bake_pingpong'))
+        args=SimpleNamespace(clean_dir='frames',out_dir='out',cycles=1.5)
+        with self.assertRaises(ValueError):engine.PackageOptions.from_args(args)
+    def test_advanced_package_accepts_real_generic_selection(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);frames=root/'frames';frames.mkdir()
+            for i in range(3):
+                image=Image.new('RGBA',(32,32));image.paste((180+i*20,90,30,255),(10,8,22,26));image.save(frames/f'{i:03}.png')
+            hashes=[hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(frames.glob('*.png'))]
+            document={'schema':cycle.SELECTION_V2,'sourceDirectory':'frames','sourceHashes':hashes,'start':0,'endExclusive':3,
+                      'sourceIndices':[0,1,2],'durations_ms':[125]*3,'fps':8,'loopPolicy':'oneshot','kind':'oneshot-return',
+                      'motionType':'oneshot-return','ticks':[1]*3,'tickHz':8,'events':[{'name':'signal-ready','atMs':125,'tick':1}],
+                      'status':'selected-needs-visual-review','method':'reviewed generic candidate'}
+            schemas=schema.SchemaSet(ROOT/'shared/schemas')
+            self.assertEqual(schemas.errors(document,'video.schema.json#/$defs/frame_selection_v2'),[])
+            path=root/'selection.json';path.write_text(json.dumps(document))
+            args=engine.build_parser().parse_args(['package','--clean-dir',str(frames),'--out-dir',str(root/'package'),
+                  '--selection',str(path),'--formats','png','--key','magenta'])
+            manifest=engine.package(args)
+            self.assertIn('signal-ready',[event['name'] for event in manifest['events']])
+            self.assertEqual(schemas.errors(manifest,'video.schema.json#/$defs/animation_v3'),[])
+            manifest['cycles']=1.5
+            self.assertTrue(schemas.errors(manifest,'video.schema.json#/$defs/animation_v3'))
+            document['kind']='run'
+            self.assertTrue(schemas.errors(document,'video.schema.json#/$defs/frame_selection_v2'))
+    def test_core_rejects_a_selection_with_an_incompatible_playback_policy(self):
+        selected={'indices':[0,1],'durations':[500,500],'start':0,'endExclusive':2,'policy':'cycle','raw':{}}
+        with self.assertRaisesRegex(ValueError,'policy'):selection.playback_plan(selected,8,'hold')
+    def test_rejected_selection_and_invalid_event_names_cannot_cross_other_entries(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder)/'selection.json';p.write_text(json.dumps({'status':'rejected'}))
+            with self.assertRaisesRegex(ValueError,'rejected'):cycle.read_selection(p)
+        with self.assertRaisesRegex(ValueError,'event'):contracts.timeline([100],{'events':[{'name':'bad name','atMs':0}]})
+    def test_schema_requires_the_actual_v2_playback_fields(self):
+        document={'schema':cycle.SELECTION_V2,'sourceDirectory':'frames','sourceHashes':['a'*64],
+                  'start':0,'endExclusive':1,'status':'selected-needs-visual-review'}
+        schemas=schema.SchemaSet(ROOT/'shared/schemas')
+        self.assertTrue(schemas.errors(document,'video.schema.json#/$defs/frame_selection_v2'))
+    def test_selection_motion_metadata_cannot_contradict_its_policy(self):
+        for raw,policy in [({'kind':'run'},'cycle'),({'kind':'cycle','motionType':'oneshot-hold'},'cycle'),({'motionType':'cycle'},'oneshot')]:
+            with self.subTest(raw=raw),self.assertRaises(ValueError):contracts.selection_motion(raw,policy)
+        for kind,policy in [('cycle','cycle'),('oneshot-return','oneshot'),('oneshot-hold','oneshot')]:contracts.selection_motion({'kind':kind,'motionType':kind},policy)
+    def test_gif_format_limit_is_reported_without_partial_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'preview.gif'
+            with self.assertRaisesRegex(ValueError,'format limit'):delivery.write_gif([Image.new('RGBA',(2,2),'red')],700,path)
+            self.assertFalse(path.exists())
+            delivery.write_gif([Image.new('RGBA',(2,2),'red')],Fraction(65535,100),path)
+            with Image.open(path) as gif:self.assertEqual(gif.info['duration'],655350)
+
+if __name__=='__main__':unittest.main()

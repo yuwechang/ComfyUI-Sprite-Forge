@@ -596,7 +596,7 @@ export async function verifyFxModule(file, options = {}) {
       'Pixels: the recording context does not rasterize, so anti-aliasing, colour and readability on a real '
         + 'background are not proven; look at the effect in the game.',
       'Frame time on phones or browsers: op_budget is a count, not a benchmark.',
-      'Equality with the baked frames: fx_build.py renders the same geometry, compared by tests, not by this tool.',
+      'Equality with the baked frames: comfyui_forge_fx_build.py renders the same geometry, compared by tests, not by this tool.',
     ],
     checks,
     inputs: [{ path: relative, sha256: createHash('sha256').update(readFileSync(absolute)).digest('hex'),
