@@ -31,6 +31,18 @@
 
 本專案不附 ComfyUI 工作流；請自行準備已能正常生成影片的 API JSON。
 
+### FFmpeg 安裝（Windows）
+
+本 Skill 需要 FFmpeg 和 FFprobe 來處理影片。
+
+如果尚未安裝，可以從以下網站取得 Windows 版本：
+
+`https://www.gyan.dev/ffmpeg/builds/`
+
+不熟悉安裝方式的話，可以直接把上面的網址交給 Codex，請它協助安裝、設定 PATH，並確認 FFmpeg 和 FFprobe 都能正常執行。
+
+如果已經安裝，就不需要重複安裝。
+
 ## 怎麼安裝？
 
 把下面這段話貼給你的 Codex：

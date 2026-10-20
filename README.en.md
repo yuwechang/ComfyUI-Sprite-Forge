@@ -31,6 +31,18 @@ Models are not included, and this project does not install ComfyUI for you. You 
 
 No ComfyUI workflow is bundled. Bring your own API JSON that already generates videos successfully.
 
+### FFmpeg installation (Windows)
+
+This skill requires FFmpeg and FFprobe to process video.
+
+If they are not installed yet, you can get a Windows build from:
+
+`https://www.gyan.dev/ffmpeg/builds/`
+
+If you are unfamiliar with the installation process, give the URL above to Codex and ask it to help install the tools, configure PATH, and verify that both FFmpeg and FFprobe run correctly.
+
+If they are already installed, there is no need to install them again.
+
 ## How to install
 
 Copy this message into your Codex:
