@@ -36,18 +36,34 @@ class WorkflowTests(unittest.TestCase):
         ImageDraw.Draw(image).rectangle((22,12,42,54),fill=(240,160,30,255))
         return np.asarray(image)
 
+    def prepare_reference(self, pixels, name):
+        source=self.root/(name+'.png');Image.fromarray(pixels).save(source)
+        output=self.root/name
+        args=prep.build_parser().parse_args(['prepare','--master',str(source),
+            '--motion-type','cycle','--description','requested motion','--canvas','128,128',
+            '--output-dir',str(output)])
+        prep.cmd_prepare(args)
+        with Image.open(output/'master.png') as image:
+            return np.asarray(image).copy()
+
     def test_near_opaque_green_background_is_not_a_cutout(self):
-        self.assertTrue(prep.needs_background_keying(self.artwork(250),'green'))
-        self.assertTrue(prep.needs_background_keying(self.artwork(255),'auto'))
+        for alpha in (250,255):
+            result=self.prepare_reference(self.artwork(alpha),'opaque-'+str(alpha))
+            self.assertEqual(result[0,0,3],0)
+            self.assertEqual(result[30,30,3],255)
 
     def test_true_transparency_and_translucent_background_are_preserved(self):
-        self.assertFalse(prep.needs_background_keying(self.artwork(0),'green'))
-        self.assertFalse(prep.needs_background_keying(self.artwork(128),'green'))
+        for alpha in (0,128):
+            pixels=self.artwork(alpha)
+            result=self.prepare_reference(pixels,'transparent-'+str(alpha))
+            np.testing.assert_array_equal(result,pixels)
 
     def test_near_opaque_non_key_background_is_not_blindly_discarded(self):
         pixels=self.artwork(250).copy();pixels[:12,:,:3]=[80,80,80]
         pixels[54:,:,:3]=[120,120,120];pixels[:,:22,:3]=[130,90,70]
-        self.assertFalse(prep.needs_background_keying(pixels,'auto'))
+        with self.assertRaisesRegex(ValueError,'not consistently flat'):
+            self.prepare_reference(pixels,'nonflat')
+        self.assertFalse((self.root/'nonflat').exists())
 
     def test_prepare_keys_alpha250_and_records_candidate_slots(self):
         source=self.root/'source.png';Image.fromarray(self.artwork(250)).save(source)

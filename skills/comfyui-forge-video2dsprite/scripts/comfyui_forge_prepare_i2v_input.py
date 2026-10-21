@@ -432,15 +432,6 @@ def _ascii(text: Any) -> str:
     return comfyui_forge_core.ascii_text(str(text))
 
 
-def needs_background_keying(pixels, requested="auto"):
-    """Near-opaque alpha is not a cutout. Require a credible flat boundary key too."""
-    alpha = pixels[..., 3]
-    if int(alpha.min()) == 255:
-        return True
-    if int(alpha.min()) < 250:
-        return False  # meaningful transparency is preserved, including translucent subjects
-    estimate=comfyui_forge_background_input.estimate(pixels)
-    return estimate['valid']
 
 
 def key_preflight(view, requested):

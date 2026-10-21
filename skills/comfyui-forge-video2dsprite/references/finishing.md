@@ -302,23 +302,3 @@ FileExistsError for an existing output. The bold pieces are library functions to
 `crisp_clusters`/`crisp_choice`, `lift_frame`, `space_palette`, `clean_lone_pixels`, `outline_shades`/
 `add_outline`, `canvas_window`; the lock is `colour_lock.master_colours`, `lock_frames` and
 `measure`.
-
-## Ported from game-opus55 pixelate.py
-
-| pixelate.py | Here |
-| --- | --- |
-| `_sil` (:383-394): area, feet line, top, stance midpoint | `measure_body` |
-| `prep_vframes` scale and scale_ref (:478-488) | `plan_scale` |
-| anchor and pinned grid (:489-495, :528-535) | `full_grid` and `reduce_frame` |
-| `resize_rgba` premultiplied area resize (:131-151) | forge_core.resample_rgba box (the bold finish takes colour from the crisp 4x split) |
-| global palette: fixed colours plus k-means++ (:586-615) | `palette build`, forge_palette.build_palette |
-| `quantize_seq` hysteresis (:228-247), no dither (:622) | forge_palette.quantize_sequence |
-| `cleanup` and `cleanup_alpha` (:211-260) | forge_palette cleanup_orphans and cleanup_alpha |
-| indexed sheet (:641-652) | `--indexed-sheet` |
-
-The ASF equivalents of the rest:
-
-- chroma key, unmix and erode (:57-128, :371-381) are the soft matte in `comfyui_forge_video2dsprite.py clean/process`;
-- feet, x and hip locks (:510-524) are `comfyui_forge_register_clip.py apply --lock`;
-- dedupe and the loop window (:413-452) are `comfyui_forge_gait_loop.py`;
-- per-tick timelines are `comfyui_forge_retime.py`.

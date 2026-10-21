@@ -30,16 +30,16 @@ class VideoPipelineScopeTests(unittest.TestCase):
     def test_video_commands_do_not_load_retired_engine_transports(self):
         parser=video.build_parser()
         self.assertEqual(parser.parse_args(['doctor']).func,video.cmd_doctor)
-        self.assertEqual(parser.parse_args(['process','--video','fixture.mp4','--output-dir','new',
-                                          '--skip-sampling']).func,video.cmd_process)
+        self.assertEqual(parser.parse_args(['process','--video','fixture.mp4','--output-dir','new']).func,video.cmd_process)
         self.assertFalse(hasattr(video,'engine_module'))
-        for command in ('package','verify'):
+        for command in ('package','verify','sample'):
             with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):
                 parser.parse_args([command])
         folder=ROOT/'skills/comfyui-forge-video2dsprite'
         for path in ('scripts/comfyui_forge_engine_export.py','scripts/comfyui_forge_validate_animation.py',
                      'references/runtime','references/packed-alpha-runtime.js',
-                     'scripts/comfyui_forge_schema.py','references/schemas'):
+                     'scripts/comfyui_forge_schema.py','references/schemas',
+                     'scripts/comfyui_forge_animation_review.py'):
             target=folder/path
             self.assertFalse(target.is_file() or (target.is_dir() and any(target.iterdir())))
 

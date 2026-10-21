@@ -1,10 +1,8 @@
 # Supplied master stills
 
-`scripts/comfyui_forge_master_still.py` prepares prompts and processes supplied images locally.
+`scripts/comfyui_forge_master_still.py` inspects and prepares supplied character images locally.
 It has no image-generation provider, candidate generation or fallback.
 
-- `prompt --spec SPEC.json --output-dir NEW` writes prompt.txt, spec.json and run.json.
-- `edit-prompt --still IMAGE --spec SPEC.json --change TEXT --output-dir NEW` writes an edit prompt and references; it does not generate or edit pixels.
 - `pad --input IMAGE --output-dir NEW` keys and fits an image to the class framing.
 - `approve --still IMAGE --spec SPEC.json --output-dir NEW` writes master.png, master_rgba.png and master.json for animation.
 

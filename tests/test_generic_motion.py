@@ -78,9 +78,6 @@ class GenericTests(unittest.TestCase):
         self.assertEqual(job['motionType'],'oneshot-hold');self.assertFalse(job['returnsToRest'])
         self.assertNotEqual(job['keyColor'],job['masterKeying']['backdrop'])
         with Image.open(self.root/'ready/master.png') as im:self.assertEqual(im.getchannel('A').getextrema()[0],0)
-    def test_real_alpha_is_preserved(self):
-        pixels=self.art((150,80,30),0)
-        self.assertFalse(prep.needs_background_keying(pixels))
     def test_three_contracts_are_distinct_and_labels_do_not_choose_behavior(self):
         rows=[{'id':label,'type':kind,'description':'bespoke requested motion','durationSeconds':1}
               for label,kind in zip(('unlisted_a','unlisted_b','unlisted_c'),mc.TYPES)]

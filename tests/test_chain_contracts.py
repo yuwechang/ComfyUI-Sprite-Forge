@@ -11,7 +11,6 @@ import comfyui_forge_retime as retime
 import comfyui_forge_animation_spec as spec
 import comfyui_forge_finalize_animation as finalizer
 import contract_schema as schema
-import comfyui_forge_animation_review as reviewer
 import comfyui_forge_gait_loop as cycle
 import comfyui_forge_media as media
 import comfyui_forge_route_media as router
@@ -58,8 +57,7 @@ class ChainTests(unittest.TestCase):
             args=cycle.build_parser().parse_args(['select','--frames-dir',str(frames),'--fps','24','--kind','cycle',
                   '--policy','cycle','--min-seconds','1','--max-seconds','1','--output-dir',str(selected)])
             cycle.cmd_select(args);selection=selected/'selection.json'
-            reviewer.select(frames,case.root/'reviewer-selection','24',minimum=24,maximum=24)
-            reviewed=json.loads((case.root/'reviewer-selection/selection.json').read_text())
+            reviewed=json.loads(selection.read_text())
             self.assertEqual(reviewed['loopPolicy'],'cycle')
             self.assertEqual(reviewed['sourceIndices'],sorted(set(reviewed['sourceIndices'])))
             review=finalizer.prepare(finished,selection,specfile,source,case.root/'review')

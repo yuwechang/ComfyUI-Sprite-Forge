@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare prompts, inspect, pad and approve user-supplied master stills."""
+"""Inspect, pad and approve user-supplied character references."""
 from __future__ import annotations
 
 import argparse
@@ -24,7 +24,6 @@ TOOL_NAME = "master_still"
 TOOL_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION
 MASTER_SCHEMA = "generate2dsprite.master.v1"
 SPEC_SCHEMA = "generate2dsprite.master_spec.v1"
-RUN_SCHEMA = "generate2dsprite.master_run.v1"
 PAD_SCHEMA = "generate2dsprite.master_pad.v1"
 
 CANVAS = 1024                    # the master canvas is square
@@ -33,69 +32,29 @@ EDGE_SAFE_PX = 16                # Minimum subject clearance from the canvas edg
 MIN_PART_AREA = 24               # source px; smaller alpha islands are specks
 GEOMETRY_ALPHA = comfyui_forge_core.ALPHA_GEOMETRY_THRESHOLD  # alpha > 16 counts for geometry
 DEFAULT_KEY = "#FF00FF"
-ORDINALS = ("FIRST", "SECOND", "THIRD", "FOURTH", "FIFTH", "SIXTH", "SEVENTH", "EIGHTH")
 
 FACINGS = ("left", "right", "front", "back", "none")
 FINISHES = ("hd", "pixel")
-PRONOUNS = {"he": "his", "she": "her", "it": "its", "they": "their"}
 MATTES = ("soft", "dominance", "hard")
 KEY_NAMES = {"#FF00FF": "magenta", "#00FF00": "green", "#0000FF": "blue"}
-TEXT_BANS = ("text", "letters", "numbers", "logo", "watermark", "signature", "UI", "border", "frame", "grid")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
-SPEC_FIELDS = ("name", "subject", "identity", "pose", "recap", "facing", "facing_parts", "view", "class", "finish",
-               "key", "genre", "pronoun", "identity_ref", "style_ref", "allowed_text", "extra_bans", "opaque_parts",
-               "extra")
-REF_FIELDS = {"identity_ref": ("path", "sha256", "what", "copy"),
-              "style_ref": ("path", "sha256", "what", "do_not_copy")}
-DEFAULT_KEEP = "costume, colours, silhouette, proportions, pose, held items and framing"
-DEFAULT_EXTRA_ROLE = "an extra reference for THE ONLY CHANGE below: use it only for what the change names"
+SPEC_FIELDS = ("name", "subject", "identity", "recap", "facing", "view", "class", "finish", "key")
 
 
 @dataclass(frozen=True)
 class ClassPreset:
-    """Shared padding dimensions and prompt framing for one character class."""
+    """Shared padding dimensions for a character framing label."""
 
     name: str
     subject_height_px: int
     top_margin_px: int
     lead_px: int
-    prompt_top_pct: int
-    prompt_bottom_pct: int
-    noun: str
-    evidence: str
 
 
 class GeometryPresets(dict):
     def __missing__(self,name):
-        return ClassPreset(str(name),768,128,0,12,12,'figure','neutral geometry; explicit dimensions override it')
-CLASSES=GeometryPresets({'subject':ClassPreset('subject',768,128,0,12,12,'figure','neutral framing')})
-
-
-@dataclass(frozen=True)
-class Style:
-    line: str    # the style sentence; {for_genre} becomes " for <genre>" or nothing
-    short: str   # the style named in an edit prompt
-    traits: str  # the style traits repeated in an edit prompt
-    word: str    # "match its <word> style" for the peer sprite
-
-
-STYLES = {
-    "pixel": Style(
-        "premium 16-bit pixel art (SNES era){for_genre}, crisp visible chunky pixels, limited palette, strong dark "
-        "outline, 3-tone cel shading, no smooth gradients, no blur",
-        "premium 16-bit pixel-art style",
-        "crisp visible chunky pixels, limited palette, strong dark outline, 3-tone cel shading, no smooth gradients, "
-        "no blur",
-        "pixel-art"),
-    "hd": Style(
-        "premium HD 2D game art{for_genre}: a clean, high-resolution hand-painted sprite illustration with crisp "
-        "sharp edges, a clean dark outline, rich but controlled colours, cel shading with soft highlights and clear "
-        "light and shadow shapes, fine readable detail, no blur, no photo-realism, no 3D render look",
-        "premium HD 2D game-art style",
-        "crisp sharp edges, a clean dark outline, rich but controlled colours, cel shading with soft highlights, fine "
-        "readable detail, no blur, no photo-realism, no 3D render look",
-        "art"),
-}
+        return ClassPreset(str(name),768,128,0)
+CLASSES=GeometryPresets({'subject':ClassPreset('subject',768,128,0)})
 
 
 _ARTICLE = re.compile(r"^(?:a|an|the)\s+", re.I)
@@ -121,17 +80,6 @@ def strip_article(text: str) -> str:
 
 def strip_period(text: str) -> str:
     return text.strip().rstrip(".").rstrip()
-
-
-def sentence(text: str) -> str:
-    text = text.strip()
-    return text if text[-1:] in ".!?" else text + "."
-
-
-def capitalised(text: str) -> str:
-    """The text as a sentence of its own: first letter upper case, final full stop."""
-    text = sentence(text)
-    return text[:1].upper() + text[1:]
 
 
 def positive_int(text: str) -> int:
@@ -171,16 +119,6 @@ def key_rgb(hex_key: str) -> tuple[int, int, int]:
     return tuple(int(hex_key[i:i + 2], 16) for i in (1, 3, 5))  # type: ignore[return-value]
 
 
-def key_words(hex_key: str) -> str:
-    """'magenta #FF00FF' for a declared key, else the hex colour."""
-    name = KEY_NAMES.get(hex_key)
-    return f"{name} {hex_key}" if name else hex_key
-
-
-def key_name(hex_key: str) -> str:
-    return KEY_NAMES.get(hex_key, "key-colour")
-
-
 def probe_image(path: Path) -> tuple[int, int]:
     """(width, height) of an image file; ValueError when it is not one."""
     try:
@@ -202,45 +140,16 @@ def file_ref(path: Path, base: Path, *, size: bool = False) -> dict[str, Any]:
     return ref
 
 
-def _ref_from_spec(value: Any, field: str, base: Path) -> dict[str, Any]:
-    """A reference entry of a spec file: a path string or {path, ...}; relative paths use ``base``."""
-    if isinstance(value, str):
-        value = {"path": value}
-    if not isinstance(value, dict):
-        raise ValueError(f"spec field {field} must be a path or an object with a path.")
-    unknown = sorted(set(value) - set(REF_FIELDS[field]))
-    if unknown:
-        raise ValueError(f"spec field {field} has unknown key(s) {', '.join(unknown)}; "
-                         f"allowed: {', '.join(REF_FIELDS[field])}.")
-    if not isinstance(value.get("path"), str) or not value["path"].strip():
-        raise ValueError(f"spec field {field} needs a path.")
-    ref = dict(value)
-    path = Path(value["path"])
-    ref["path"] = path if path.is_absolute() else base / path
-    return ref
-
-
 def load_spec_file(path: Path) -> dict[str, Any]:
-    """Read a master spec (generate2dsprite.master_spec.v1); reference paths become absolute."""
-    path = Path(path)
-    try:
-        data = comfyui_forge_core.read_json(path)
-    except ValueError as error:
-        raise ValueError(f"{path.name} is not valid JSON ({error})") from None
+    data = comfyui_forge_core.read_json(path)
     if not isinstance(data, dict):
-        raise ValueError(f"{path.name} must hold a JSON object.")
+        raise ValueError(f"{path.name} must hold a JSON object")
     data = dict(data)
-    schema = data.pop("schema", SPEC_SCHEMA)
-    if schema != SPEC_SCHEMA:
-        raise ValueError(f"{path.name} has schema {schema!r}; expected {SPEC_SCHEMA}.")
+    if data.pop("schema", SPEC_SCHEMA) != SPEC_SCHEMA:
+        raise ValueError(f"expected {SPEC_SCHEMA}")
     unknown = sorted(set(data) - set(SPEC_FIELDS))
     if unknown:
-        raise ValueError(f"{path.name} has unknown spec field(s) {', '.join(unknown)}; "
-                         f"allowed: {', '.join(SPEC_FIELDS)}.")
-    base = path.resolve().parent
-    for field in REF_FIELDS:
-        if data.get(field) is not None:
-            data[field] = _ref_from_spec(data[field], field, base)
+        raise ValueError("unknown master spec fields: " + ", ".join(unknown))
     return data
 
 
@@ -252,137 +161,37 @@ def _read_text_file(path: str, what: str) -> str:
 
 
 def merge_flags(base: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
-    """Overlay the spec flags on ``base`` (flags win; --ban adds to the spec's bans)."""
     spec = dict(base)
-    simple = {"name": args.name, "subject": args.subject, "pose": args.pose, "recap": args.recap,
-              "facing": args.facing, "facing_parts": args.facing_parts, "view": args.view, "class": args.klass,
-              "finish": args.finish, "key": args.key, "genre": args.genre, "pronoun": args.pronoun,
-              "allowed_text": args.allowed_text, "opaque_parts": args.opaque_parts, "extra": args.extra}
-    for field, value in simple.items():
+    for field in SPEC_FIELDS:
+        value = getattr(args, "klass" if field == "class" else field, None)
         if value is not None:
             spec[field] = value
     if args.identity is not None and args.identity_file:
-        raise ValueError("pass --identity or --identity-file, not both.")
+        raise ValueError("pass --identity or --identity-file, not both")
     if args.identity_file:
         spec["identity"] = _read_text_file(args.identity_file, "--identity-file")
-    elif args.identity is not None:
-        spec["identity"] = args.identity
-    for field, path, what, other, other_key in (
-            ("identity_ref", args.identity_ref, args.identity_ref_what, args.identity_copy, "copy"),
-            ("style_ref", args.style_ref, args.style_ref_what, args.style_dont_copy, "do_not_copy")):
-        ref = dict(spec.get(field) or {})
-        if path:
-            ref = {key: value for key, value in ref.items() if key != "sha256"}
-            ref["path"] = Path(path).resolve()
-        if what is not None or other is not None:
-            if "path" not in ref:
-                flag = "--identity-ref" if field == "identity_ref" else "--style-ref"
-                raise ValueError(f"{flag} is needed before its description flags.")
-            if what is not None:
-                ref["what"] = what
-            if other is not None:
-                ref[other_key] = other
-        if ref:
-            spec[field] = ref
-    if args.ban:
-        spec["extra_bans"] = [*(spec.get("extra_bans") or []), *args.ban]
     return spec
 
 
-def _normalise_ref(ref: dict[str, Any], field: str, *, attach: bool, warnings: list[str]) -> dict[str, Any]:
-    path = Path(ref["path"])
-    label = "identity reference" if field == "identity_ref" else "style reference"
-    out: dict[str, Any] = {"path": path}
-    for key in REF_FIELDS[field][2:]:
-        value = ref.get(key)
-        if key == "do_not_copy" and isinstance(value, str) and not value.strip():
-            out[key] = ""
-            continue
-        text = clean_text(value, f"{field}.{key}")
-        if text is not None:
-            out[key] = text
-    if not path.is_file():
-        if attach:
-            raise ValueError(f"The {label} {path.as_posix()} does not exist.")
-        warnings.append(f"the {label} {path.name} is missing; its recorded sha256 is kept")
-        if isinstance(ref.get("sha256"), str):
-            out["sha256"] = ref["sha256"]
-        return out
-    probe_image(path)
-    digest = comfyui_forge_core.sha256_file(path)
-    recorded = ref.get("sha256")
-    if isinstance(recorded, str) and recorded.lower() != digest:
-        warnings.append(f"the {label} {path.name} changed since the spec was written (sha256 differs)")
-    out["sha256"] = digest
-    return out
-
-
-def normalise_spec(raw: dict[str, Any], *, attach: bool) -> tuple[dict[str, Any], list[str]]:
-    """Validate a merged spec and fill the defaults. ``attach``: references must exist (they are sent)."""
-    warnings: list[str] = []
+def normalise_spec(raw: dict[str, Any]) -> dict[str, Any]:
     name = raw.get("name")
-    if not isinstance(name, str) or not NAME_RE.match(name.strip()):
-        raise ValueError("--name is required: 1-64 letters, digits, '.', '_' or '-', starting with a letter or "
-                         f"digit; got {name!r}.")
-    klass = str(raw.get("class") or "subject").strip().lower()
+    if not isinstance(name, str) or not NAME_RE.fullmatch(name.strip()):
+        raise ValueError("--name must be an asset id of 1-64 letters, digits, '.', '_' or '-'")
     finish = str(raw.get("finish") or "hd").strip().lower()
-    if finish not in FINISHES:
-        raise ValueError(f"finish must be hd or pixel; got {finish!r}.")
-    facing = str(raw.get("facing") or ("none" if klass == "prop" else "right")).strip().lower()
-    if facing not in FACINGS:
-        raise ValueError(f"facing must be one of {', '.join(FACINGS)}; got {facing!r}.")
-    pronoun = str(raw.get("pronoun") or "they").strip().lower()
-    if pronoun not in PRONOUNS:
-        raise ValueError(f"pronoun must be one of {', '.join(PRONOUNS)}; got {pronoun!r}.")
-    spec: dict[str, Any] = {"name": name.strip(), "class": klass, "finish": finish, "facing": facing,
-                            "key": normalise_key(raw.get("key") or DEFAULT_KEY), "pronoun": pronoun}
-    for field in ("subject", "identity", "pose", "recap", "facing_parts", "view", "genre", "allowed_text",
-                  "opaque_parts", "extra"):
+    facing = str(raw.get("facing") or "right").strip().lower()
+    if finish not in FINISHES or facing not in FACINGS:
+        raise ValueError("invalid finish or facing")
+    spec = {"name": name.strip(), "class": str(raw.get("class") or "subject").strip().lower(),
+            "finish": finish, "facing": facing, "key": normalise_key(raw.get("key") or DEFAULT_KEY)}
+    for field in ("subject", "identity", "recap", "view"):
         spec[field] = clean_text(raw.get(field), field)
-    if not spec["subject"]:
-        raise ValueError("--subject is required: a short noun phrase such as 'a young fox ranger, full body'.")
-    if not spec["identity"]:
-        raise ValueError("--identity (or --identity-file) is required: a long, precise visual description "
-                         "(face, hair, body, costume, colours, held items).")
-    bans = raw.get("extra_bans") or []
-    if isinstance(bans, str) or not isinstance(bans, list):
-        raise ValueError("spec field extra_bans must be a list of strings.")
-    spec["extra_bans"] = []
-    for item in bans:
-        text = clean_text(item, "extra_bans")
-        if text:
-            spec["extra_bans"].append(re.sub(r"^no\s+", "", strip_period(text), flags=re.I))
-    for field in REF_FIELDS:
-        ref = raw.get(field)
-        spec[field] = _normalise_ref(ref, field, attach=attach, warnings=warnings) if ref else None
-    return spec, warnings
+    if not spec["subject"] or not spec["identity"]:
+        raise ValueError("--subject and --identity (or --identity-file) are required")
+    return spec
 
 
-def spec_document(spec: dict[str, Any], base: Path) -> dict[str, Any]:
-    """The spec as written to spec.json in ``base``: reference paths relative to it, with sha256."""
-    doc: dict[str, Any] = {"schema": SPEC_SCHEMA}
-    for field in SPEC_FIELDS:
-        value = spec.get(field)
-        if field in REF_FIELDS and value:
-            ref: dict[str, Any] = {"path": comfyui_forge_core.manifest_path(value["path"], base)}
-            if value.get("sha256"):
-                ref["sha256"] = value["sha256"]
-            for key in REF_FIELDS[field][2:]:
-                if key in value:
-                    ref[key] = value[key]
-            doc[field] = ref
-        else:
-            doc[field] = value
-    return doc
-
-
-def attached_references(spec: dict[str, Any]) -> list[tuple[str, Path]]:
-    """The base-still references in attachment order: identity (FIRST), then the peer sprite."""
-    refs = []
-    for role, field in (("identity", "identity_ref"), ("style", "style_ref")):
-        if spec.get(field):
-            refs.append((role, Path(spec[field]["path"])))
-    return refs
+def spec_document(spec: dict[str, Any]) -> dict[str, Any]:
+    return {"schema": SPEC_SCHEMA, **{field: spec.get(field) for field in SPEC_FIELDS}}
 
 
 def identity_recap(spec: dict[str, Any]) -> str:
@@ -400,141 +209,6 @@ def default_view(spec: dict[str, Any]) -> str:
         return "three-quarter view"
     return {"left": "side view (profile to three-quarter)", "right": "side view (profile to three-quarter)",
             "front": "front view", "back": "back view", "none": "three-quarter view"}[spec["facing"]]
-
-
-def facing_clause(spec: dict[str, Any]) -> str:
-    """The facing stated three ways: the FACING label, the parts turned to an edge, forward and back."""
-    pos = PRONOUNS[spec["pronoun"]]
-    facing = spec["facing"]
-    parts = spec.get("facing_parts") or ("front" if spec["class"] == "prop" else "face, gaze and chest")
-    verb = "turn" if ("," in parts or " and " in parts) else "turns"
-    if facing in ("left", "right"):
-        side, other = facing.upper(), "RIGHT" if facing == "left" else "LEFT"
-        return (f"clearly FACING {side}: {pos} {parts} {verb} toward the {side} edge of the image; forward is "
-                f"{side} and {pos} back is toward the {other} edge.")
-    if facing == "front":
-        return (f"clearly FACING THE VIEWER: {pos} {parts} {verb} straight toward the viewer; forward is out of the "
-                f"picture and {pos} back is never visible.")
-    if facing == "back":
-        return (f"clearly FACING AWAY from the viewer: {pos} back and the back of {pos} head turn toward the "
-                f"viewer; forward is into the picture and {pos} face is not visible.")
-    return ""
-
-
-def view_and_facing(spec: dict[str, Any]) -> str:
-    view = default_view(spec)
-    return {"left": f"{view}, facing LEFT", "right": f"{view}, facing RIGHT", "front": f"{view}, facing the viewer",
-            "back": f"{view}, facing away from the viewer", "none": view}[spec["facing"]]
-
-
-def ban_sentence(spec: dict[str, Any]) -> str:
-    text = "No " + ", no ".join([*TEXT_BANS, *spec.get("extra_bans", [])]) + "."
-    if spec.get("allowed_text"):
-        text += (f" The ONLY written character allowed anywhere is {strip_period(spec['allowed_text'])}; nothing "
-                 "else carries any character, letter or symbol.")
-    return text
-
-
-def background_sentence(spec: dict[str, Any]) -> str:
-    place = "object" if CLASSES[spec["class"]].noun == "object" else "character"
-    return (f"Background: solid flat pure {key_words(spec['key'])} everywhere outside the {place}, no shadow, no "
-            "ground, no glow on the background.")
-
-
-def reference_paragraph(spec: dict[str, Any]) -> str | None:
-    """Reference roles: FIRST = identity (copy exactly), SECOND = approved peer sprite (style only)."""
-    ident, peer = spec.get("identity_ref"), spec.get("style_ref")
-    if not ident and not peer:
-        return None
-    pos = PRONOUNS[spec["pronoun"]]
-    parts = []
-    if ident:
-        what = ident.get("what") or "an image of this exact character"
-        copy = ident.get("copy") or f"{pos} face, hair, body shape, costume, colours, markings and equipment"
-        lead = "the FIRST attached image" if peer else "the attached image"
-        parts.append(f"{lead} is {strip_period(what)}; copy {strip_period(copy)} exactly.")
-    if peer:
-        lead = "The SECOND attached image" if ident else "the attached image"
-        what = peer.get("what")
-        body = (f"is an approved in-game sprite from the same game ({strip_period(what)})" if what
-                else "is an approved in-game sprite of another character from the same game")
-        text = (f"{lead} {body}: match its {STYLES[spec['finish']].word} style, outline weight, shading, figure size "
-                "and position on the canvas")
-        dont = peer.get("do_not_copy")
-        if dont is None:
-            dont = "that character's face, hair, outfit, equipment or colours"
-        parts.append(text + (f"; do NOT copy {strip_period(dont)}." if dont else "."))
-    return ("Reference images: " if ident and peer else "Reference image: ") + " ".join(parts)
-
-
-def subject_paragraph(spec: dict[str, Any]) -> str:
-    clause = facing_clause(spec)
-    head = f"Subject: {strip_period(spec['subject'])}, {default_view(spec)}"
-    text = f"{head}, {clause}" if clause else f"{head}."
-    text += f" {capitalised(spec['identity'])}"
-    if spec.get("pose"):
-        text += f" {capitalised(spec['pose'])}"
-    return text
-
-
-def size_paragraph(spec: dict[str, Any]) -> str:
-    """Framing as canvas-edge percentages, nothing touching an edge, solid opaque pixels."""
-    preset = CLASSES[spec["class"]]
-    noun = preset.noun
-    top, bottom = preset.prompt_top_pct, preset.prompt_bottom_pct
-    extent = ("including hair, headgear, raised weapons and effects" if noun == "figure"
-              else "including every attached part")
-    text = (f"Size and position: one single {noun}, the top of the {noun} ({extent}) about {top} percent below the "
-            f"top edge of the canvas and its lowest point about {bottom} percent above the bottom edge (the {noun} "
-            f"about {100 - top - bottom} percent of the canvas height), ")
-    facing = spec["facing"]
-    if preset.lead_px and facing in ("left", "right"):
-        behind = "right" if facing == "left" else "left"
-        text += (f"the body a little {behind} of centre so there is extra empty room on the {facing.upper()} side "
-                 "for forward motion, ")
-    else:
-        text += "centred horizontally, "
-    text += (f"generous empty {key_name(spec['key'])} margin on every side, nothing touching or crossing the edges. "
-             f"The whole {noun}")
-    if spec.get("opaque_parts"):
-        text += f" ({strip_period(spec['opaque_parts'])})"
-    return text + (" is drawn with solid, fully opaque pixels: no transparency, no semi-transparent glow, no soft "
-                   "aura, nothing blended with the background.")
-
-
-def build_prompt(spec: dict[str, Any]) -> str:
-    """Build a square master-still prompt from the selected style and framing."""
-    style = STYLES[spec["finish"]]
-    for_genre = f" for {strip_period(spec['genre'])}" if spec.get("genre") else ""
-    paragraphs = [f"Create exactly ONE square image ({CANVAS}x{CANVAS}).",
-                  f"Style: {style.line.format(for_genre=for_genre)}. {ban_sentence(spec)}"]
-    references = reference_paragraph(spec)
-    if references:
-        paragraphs.append(references)
-    paragraphs += [subject_paragraph(spec), size_paragraph(spec)]
-    if spec.get("extra"):
-        paragraphs.append(capitalised(spec["extra"]))
-    paragraphs.append(background_sentence(spec))
-    return "\n\n".join(paragraphs) + "\n"
-
-
-def build_edit_prompt(spec: dict[str, Any], *, change: str, keep: str | None, roles: Sequence[str],
-                      framing: str | None) -> str:
-    """Fix by edit (base_nobu_v2a.txt): reproduce the FIRST image exactly, with THE ONLY CHANGE."""
-    preset = CLASSES[spec["class"]]
-    style = STYLES[spec["finish"]]
-    lines = [f"The FIRST attached image is the approved master still on a flat {key_words(spec['key'])} background: "
-             f"{strip_period(spec['subject'])}."]
-    for index, role in enumerate(roles, start=1):
-        lines.append(f"The {ORDINALS[index]} attached image is {strip_period(role)}.")
-    position = f" ({framing})" if framing else ""
-    reproduce = (f"Reproduce the FIRST image exactly: the same single {preset.noun} at exactly the same size and the "
-                 f"same position on the canvas{position}, the same pose, {view_and_facing(spec)}, the same "
-                 f"{identity_recap(spec)}. Same {style.short} as the FIRST image: {style.traits}.")
-    only = (f"THE ONLY CHANGE: {sentence(change)} Everything else ({strip_period(keep or DEFAULT_KEEP)}) stays "
-            "exactly as in the FIRST image.")
-    return "\n\n".join([f"Create exactly ONE square image ({CANVAS}x{CANVAS}).", " ".join(lines), reproduce, only,
-                        f"{background_sentence(spec)} {ban_sentence(spec)}"]) + "\n"
 
 
 @dataclass(frozen=True)
@@ -651,7 +325,7 @@ def pad_still(pixels: np.ndarray, *, key_hex: str, framing: Framing, facing: str
                                          band_rows=max(2, comfyui_forge_core.round_half_up(0.04 * measured_h)))
     if parts["touches"]:
         warnings.append(f"the subject touches the {', '.join(parts['touches'])} edge of the still and may be cut "
-                        "off: reprompt or edit-prompt it with more margin")
+                        "off: prepare a source image with more margin")
     if scale > 1.0 + 1e-9:
         warnings.append(f"the subject is upscaled x{scale:.2f} ({box_h} px source height): detail will be soft; "
                         "ask the route for a larger figure")
@@ -695,68 +369,6 @@ def pad_still(pixels: np.ndarray, *, key_hex: str, framing: Framing, facing: str
     }
     return {"padded": padded, "cutout": cutout, "framing": framing_record, "transform": transform,
             "matte": matte_record, "key_choice": key_choice, "warnings": warnings}
-
-
-def describe_framing(path: Path, key_hex: str, noun: str) -> str | None:
-    """The FIRST image's framing as canvas-edge percentages (for an edit), or None when it cannot be keyed."""
-    try:
-        image, _ = comfyui_forge_core.load_rgba(path)
-        keyed, _ = key_subject(np.asarray(image), key_hex, "soft")
-        x0, y0, x1, y1 = subject_parts(keyed[..., 3], MIN_PART_AREA)["bbox"]
-    except ValueError:
-        return None
-    height, width = keyed.shape[:2]
-
-    def pct(value: float, total: int) -> int:
-        return comfyui_forge_core.round_half_up(100.0 * value / total)
-
-    return (f"the top of the {noun} about {pct(y0, height)} percent below the top edge, its lowest point about "
-            f"{pct(height - y1, height)} percent above the bottom edge, its left-most point about {pct(x0, width)} "
-            f"percent from the left edge and its right-most point about {pct(width - x1, width)} percent from the "
-            "right edge")
-
-
-def run_document(command: str, spec: dict[str, Any], stage: Path, *, references: Sequence[tuple[str, Path]],
-                 warnings: list[str], edit: dict[str, Any] | None = None) -> dict[str, Any]:
-    doc: dict[str, Any] = {
-        "schema": RUN_SCHEMA,
-        "tool": {"name": TOOL_NAME, "version": TOOL_VERSION},
-        "command": command,
-        "created": comfyui_forge_core.utc_timestamp(),
-        "name": spec["name"], "class": spec["class"], "finish": spec["finish"], "facing": spec["facing"],
-        "key": spec["key"],
-        "prompt": comfyui_forge_core.file_ref(stage / "prompt.txt", stage),
-        "spec": comfyui_forge_core.file_ref(stage / "spec.json", stage),
-        "references": [{"role": role, "ordinal": ORDINALS[index], **comfyui_forge_core.file_ref(path, stage)}
-                       for index, (role, path) in enumerate(references)],
-        "status": "ok",
-    }
-    if edit:
-        doc["edit"] = edit
-    doc["warnings"] = list(warnings)
-    return doc
-
-
-def load_run(path: str | Path) -> tuple[Path, dict[str, Any]]:
-    path = Path(path)
-    run_file = path / "run.json" if path.is_dir() else path
-    if not run_file.is_file():
-        raise ValueError(f"No run.json in {path.as_posix()}; pass the output folder of prompt or edit-prompt.")
-    doc = comfyui_forge_core.read_json(run_file)
-    if not isinstance(doc, dict) or doc.get("schema") != RUN_SCHEMA:
-        raise ValueError(f"{run_file.as_posix()} is not a {RUN_SCHEMA} record.")
-    return run_file.resolve().parent, doc
-
-
-def load_master(path: str | Path) -> tuple[Path, dict[str, Any]]:
-    path = Path(path)
-    master_file = path / "master.json" if path.is_dir() else path
-    if not master_file.is_file():
-        raise ValueError(f"No master.json at {path.as_posix()}.")
-    doc = comfyui_forge_core.read_json(master_file)
-    if not isinstance(doc, dict) or doc.get("schema") != MASTER_SCHEMA:
-        raise ValueError(f"{master_file.as_posix()} is not a {MASTER_SCHEMA} record.")
-    return master_file.resolve().parent, doc
 
 
 def _is_rel_path(value: Any) -> bool:
@@ -805,11 +417,6 @@ def validate_master(doc: Any) -> list[str]:
         prompt = files.get("prompt")
         if prompt is not None and (not isinstance(prompt, dict) or not _is_sha(prompt.get("sha256"))):
             errors.append("files.prompt must be null or a fileRef")
-    references = doc.get("references")
-    if not isinstance(references, list) or any(
-            not isinstance(ref, dict) or ref.get("role") not in ("identity", "style")
-            or not _is_rel_path(ref.get("path")) for ref in references):
-        errors.append("references must be a list of {role: identity|style, path, sha256}")
     transform = doc.get("transform")
     scale = transform.get("scale") if isinstance(transform, dict) else None
     offset = transform.get("offset") if isinstance(transform, dict) else None
@@ -820,113 +427,20 @@ def validate_master(doc: Any) -> list[str]:
     return errors
 
 
-def _write_prompt_and_spec(stage: Path, spec: dict[str, Any], prompt: str) -> None:
-    (stage / "prompt.txt").write_bytes(prompt.encode("utf-8"))
-    comfyui_forge_core.write_json(stage / "spec.json", spec_document(spec, stage))
-
-
 def _emit(warnings: Sequence[str]) -> None:
     for warning in warnings:
         print("warning: " + _ascii(warning), file=sys.stderr)
 
 
-def _base_spec(args: argparse.Namespace) -> dict[str, Any]:
-    return load_spec_file(Path(args.spec)) if getattr(args, "spec", None) else {}
-
-
-def _prepare_prompt(command, args, spec, prompt, references, warnings, *, edit=None):
-    output = Path(args.output_dir)
-    with comfyui_forge_core.staged_output(output) as stage:
-        _write_prompt_and_spec(stage, spec, prompt)
-        if edit is not None:
-            edit = {**edit, "still": comfyui_forge_core.file_ref(edit["still"], stage),
-                    "extra": [{"role": role, **comfyui_forge_core.file_ref(path, stage)} for path, role in edit["extra"]]}
-        doc = run_document(command, spec, stage, references=references, warnings=warnings, edit=edit)
-        comfyui_forge_core.write_json(stage / "run.json", doc)
-    _emit(warnings)
-    final = final_path(output)
-    return {"status": "ok", "command": command, "output": str(final),
-            "prompt": str(final / "prompt.txt"), "spec": str(final / "spec.json"),
-            "run": str(final / "run.json"), "warnings": len(warnings)}, 0
-
-
-def cmd_prompt(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
-    spec, warnings = normalise_spec(merge_flags(_base_spec(args), args), attach=True)
-    return _prepare_prompt("prompt", args, spec, build_prompt(spec), attached_references(spec), warnings)
-
-
-def cmd_edit(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
-    sources = [bool(args.master), bool(args.run), bool(args.spec)]
-    if sum(sources) > 1:
-        raise ValueError("pass one of --master, --run or --spec.")
-    warnings: list[str] = []
-    base: dict[str, Any] = {}
-    still = None
-    if args.master:
-        master_dir, master = load_master(args.master)
-        base = load_spec_file(master_dir / master["files"]["spec"]["path"])
-        base["recap"] = master.get("identity_recap") or base.get("recap")
-        still = master_dir / master["files"]["master"]["path"]
-    elif args.run:
-        run_dir, run = load_run(args.run)
-        base = load_spec_file(run_dir / "spec.json")
-    elif args.spec:
-        base = load_spec_file(Path(args.spec))
-    if args.still:
-        still = Path(args.still)
-    if still is None:
-        raise ValueError("pass the supplied image: --still or --master.")
-    if not still.is_file():
-        raise ValueError(f"The still to edit does not exist: {still.as_posix()}")
-    probe_image(still)
-    if args.change is not None and args.change_file:
-        raise ValueError("pass --change or --change-file, not both.")
-    change = _read_text_file(args.change_file, "--change-file") if args.change_file else args.change
-    change = clean_text(change, "change")
-    if not change:
-        raise ValueError("--change (or --change-file) is required: THE ONLY CHANGE to make.")
-    extras = [Path(path) for path in args.extra_reference]
-    if len(args.extra_role) > len(extras):
-        raise ValueError("more --extra-role than --extra-reference values.")
-    if 1 + len(extras) > len(ORDINALS):
-        raise ValueError(f"at most {len(ORDINALS) - 1} --extra-reference images.")
-    for path in extras:
-        if not path.is_file():
-            raise ValueError(f"--extra-reference {path.as_posix()} does not exist.")
-        probe_image(path)
-    roles = [clean_text(role, "extra-role") or DEFAULT_EXTRA_ROLE for role in args.extra_role]
-    roles += [DEFAULT_EXTRA_ROLE] * (len(extras) - len(roles))
-    spec, spec_warnings = normalise_spec(merge_flags(base, args), attach=False)
-    warnings += spec_warnings
-    framing = describe_framing(still, spec["key"], CLASSES[spec["class"]].noun)
-    if framing is None:
-        warnings.append(f"the FIRST image has no flat {key_words(spec['key'])} backdrop to measure; the prompt "
-                        "asks for the same size and position without numbers")
-    prompt = build_edit_prompt(spec, change=change, keep=clean_text(args.keep, "keep"), roles=roles, framing=framing)
-    references = [("edit", still.resolve()), *[("extra", path.resolve()) for path in extras]]
-    edit = {"still": still.resolve(), "change": change, "keep": clean_text(args.keep, "keep") or DEFAULT_KEEP,
-            "extra": list(zip([path.resolve() for path in extras], roles)), "framing": framing}
-    return _prepare_prompt("edit-prompt", args, spec, prompt, references, warnings, edit=edit)
-
-
 def _still_and_spec(args: argparse.Namespace, warnings: list[str]) -> dict[str, Any]:
-    """Resolve a supplied still and the optional saved prompt specification."""
-    still_arg = getattr(args, "still", None) or getattr(args, "input", None)
-    if args.run and args.spec:
-        raise ValueError("pass --run or --spec, not both (the run holds its spec).")
-    context: dict[str, Any] = {"run_dir": None, "run": None, "still": None, "base": {}}
-    if args.run:
-        run_dir, run = load_run(args.run)
-        context.update(run_dir=run_dir, run=run, base=load_spec_file(run_dir / "spec.json"))
-    elif args.spec:
-        context["base"] = load_spec_file(Path(args.spec))
-    if still_arg:
-        context["still"] = Path(still_arg)
-    if context["still"] is None:
+    still = getattr(args, "still", None) or getattr(args, "input", None)
+    if not still:
         raise ValueError("pass the supplied still: --still/--input PATH.")
-    if not context["still"].is_file():
-        raise ValueError(f"The still does not exist: {context['still'].as_posix()}")
-    return context
+    still = Path(still)
+    if not still.is_file():
+        raise ValueError(f"The still does not exist: {still.as_posix()}")
+    base = load_spec_file(Path(args.spec)) if args.spec else {}
+    return {"still": still, "base": base}
 
 
 def cmd_pad(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
@@ -971,7 +485,7 @@ def cmd_pad(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
 def cmd_approve(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     warnings: list[str] = []
     context = _still_and_spec(args, warnings)
-    run, run_dir, still = context["run"], context["run_dir"], context["still"]
+    still = context["still"]
     if args.identity_recap is not None and args.identity_recap_file:
         raise ValueError("pass --identity-recap or --identity-recap-file, not both.")
     raw = merge_flags(context["base"], args)
@@ -979,12 +493,9 @@ def cmd_approve(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         raw["recap"] = _read_text_file(args.identity_recap_file, "--identity-recap-file")
     elif args.identity_recap is not None:
         raw["recap"] = args.identity_recap
-    spec, spec_warnings = normalise_spec(raw, attach=False)
-    warnings += spec_warnings
+    spec = normalise_spec(raw)
     spec["recap"] = identity_recap(spec)
     prompt_path = None
-    if run_dir is not None and (run_dir / "prompt.txt").is_file():
-        prompt_path = run_dir / "prompt.txt"
     if args.prompt_file:
         prompt_path = Path(args.prompt_file)
         if not prompt_path.is_file():
@@ -1005,24 +516,7 @@ def cmd_approve(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         if prompt_path is not None:
             shutil.copyfile(prompt_path, stage / "prompt.txt")
             prompt_ref = comfyui_forge_core.file_ref(stage / "prompt.txt", stage)
-        comfyui_forge_core.write_json(stage / "spec.json", spec_document(spec, stage))
-        references = []
-        for role, field in (("identity", "identity_ref"), ("style", "style_ref")):
-            ref = spec.get(field)
-            if ref:
-                entry = {"role": role, "path": comfyui_forge_core.manifest_path(ref["path"], stage),
-                         "sha256": ref.get("sha256")}
-                if Path(ref["path"]).is_file():
-                    entry["bytes"] = Path(ref["path"]).stat().st_size
-                if ref.get("what"):
-                    entry["what"] = ref["what"]
-                references.append(entry)
-        edit = None
-        if run is not None and run.get("command") in ("edit", "edit-prompt") and isinstance(run.get("edit"), dict):
-            edited = run["edit"].get("still") or {}
-            edit = {"from": {"path": comfyui_forge_core.manifest_path(run_dir / edited["path"], stage),
-                             "sha256": edited.get("sha256")} if edited.get("path") else None,
-                    "change": run["edit"].get("change")}
+        comfyui_forge_core.write_json(stage / "spec.json", spec_document(spec))
         doc = {
             "schema": MASTER_SCHEMA,
             "tool": {"name": TOOL_NAME, "version": TOOL_VERSION},
@@ -1043,16 +537,13 @@ def cmd_approve(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 "spec": comfyui_forge_core.file_ref(stage / "spec.json", stage),
                 "prompt": prompt_ref,
             },
-            "references": references,
             "transform": result["transform"],
             "route": route,
             "provenance": {
-                "command": run.get("command") if run else "external",
-                "run": comfyui_forge_core.manifest_path(run_dir, stage) if run_dir is not None else None,
+                "command": "supplied-image",
                 "source_name": still.name,
                 "source_sha256": info["sha256"],
-                "edit": edit,
-            },
+                },
             "matte": {**result["matte"], "key_choice": result["key_choice"]},
             "warnings": warnings,
         }
@@ -1070,59 +561,29 @@ def cmd_approve(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             "warnings": len(warnings)}, 0
 
 
-def add_spec_arguments(parser: argparse.ArgumentParser, *, with_spec_file: bool = True) -> None:
-    group = parser.add_argument_group("spec (a --spec JSON file and/or these flags; flags win)")
-    if with_spec_file:
-        group.add_argument("--spec", help="master spec JSON (generate2dsprite.master_spec.v1); its relative paths "
-                                          "are relative to the file")
-    group.add_argument("--name", help="asset id: 1-64 letters, digits, '.', '_' or '-'")
-    group.add_argument("--subject", help="short noun phrase: what it is, e.g. 'a young fox ranger, full body'")
-    group.add_argument("--identity", help="long, precise visual description: face, hair, body, costume, colours, "
-                                          "held items")
-    group.add_argument("--identity-file", help="UTF-8 text file holding the identity description")
-    group.add_argument("--pose", help="stance or pose of the still (optional)")
-    group.add_argument("--recap", help="identity recap reused verbatim by motion prompts: a noun phrase that reads "
-                                       "after 'The same' (default: subject (identity))")
-    group.add_argument("--facing", choices=FACINGS, help="left, right, front, back or none (default right; props none)")
-    group.add_argument("--facing-parts", help="parts named in the facing sentence (default 'face, gaze and chest'; "
-                                              "props 'front')")
-    group.add_argument("--view", help="camera view words (default by facing, e.g. 'side view (profile to "
-                                      "three-quarter)')")
-    group.add_argument("--class", dest="klass", type=str,
-                       help="framing preset: hero, mob, boss or prop (default hero)")
-    group.add_argument("--finish", choices=FINISHES, help="hd (default) or pixel: sets the style line")
-    group.add_argument("--key", type=key_arg, help="flat key colour: #RRGGBB, magenta, green or blue (default #FF00FF)")
-    group.add_argument("--genre", help="the game, for the style line, e.g. 'a side-scrolling action game' "
-                                       "(default: none)")
-    group.add_argument("--pronoun", choices=sorted(PRONOUNS), help="he, she, it or they (default they)")
-    group.add_argument("--identity-ref", help="identity reference (FIRST attached image): this exact character, "
-                                              "copied exactly")
-    group.add_argument("--identity-ref-what", help="what the identity reference is, e.g. 'the dialogue portrait of "
-                                                   "this exact character'")
-    group.add_argument("--identity-copy", help="what to copy from it exactly (default: face, hair, body shape, "
-                                               "costume, colours, markings and equipment)")
-    group.add_argument("--style-ref", help="peer sprite (SECOND attached image): an approved in-game sprite whose "
-                                           "style, outline, shading, size and position are matched")
-    group.add_argument("--style-ref-what", help="what the peer sprite is, e.g. 'the ghost samurai summon, facing "
-                                                "right'")
-    group.add_argument("--style-dont-copy", help="what NOT to copy from the peer sprite (default: its face, hair, "
-                                                 "outfit, equipment or colours; an empty value drops the clause)")
-    group.add_argument("--allowed-text", help="the one written mark allowed, e.g. 'the single gold crest symbol'; "
-                                              "every other text stays banned")
-    group.add_argument("--ban", action="append", help="extra 'no ...' item, repeatable (adds to the spec's bans)")
-    group.add_argument("--opaque-parts", help="parts named in the opaque-pixels sentence, e.g. 'hair, spear, flames'")
-    group.add_argument("--extra", help="extra art-direction paragraph, placed before the background line")
+def add_spec_arguments(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("character metadata")
+    group.add_argument("--spec", help="saved character metadata JSON; flags override it")
+    group.add_argument("--name", help="asset id")
+    group.add_argument("--subject", help="short description of the supplied character")
+    group.add_argument("--identity", help="character appearance used in animation prompts")
+    group.add_argument("--identity-file", help="UTF-8 file containing the appearance description")
+    group.add_argument("--recap", help="identity recap for animation prompts")
+    group.add_argument("--facing", choices=FACINGS)
+    group.add_argument("--view", help="view of the supplied character image")
+    group.add_argument("--class", dest="klass", help="character framing label")
+    group.add_argument("--finish", choices=FINISHES)
+    group.add_argument("--key", type=key_arg)
 
 
 def add_pad_arguments(parser: argparse.ArgumentParser) -> None:
     group = parser.add_argument_group("framing and keying")
     group.add_argument("--subject-height", type=int,
-                       help=f"subject height in px on the {CANVAS} canvas (default: the class preset, hero 788)")
+                       help=f"subject height in px on the {CANVAS} canvas (default: 768)")
     group.add_argument("--top-margin", type=int,
-                       help="px from the canvas top to the subject top (default: the class preset, hero 138)")
+                       help="px from the canvas top to the subject top (default: 128)")
     group.add_argument("--lead", type=int,
-                       help="px the subject centre moves away from its facing side (default: the class preset, "
-                            "mob 100)")
+                       help="px the subject centre moves away from its facing side (default: 0)")
     group.add_argument("--crop-margin", type=int, default=CROP_MARGIN_PX,
                        help=f"px kept around the subject when cropping (default {CROP_MARGIN_PX})")
     group.add_argument("--matte", choices=MATTES, default="soft",
@@ -1137,41 +598,15 @@ def build_parser() -> argparse.ArgumentParser:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    pp = sub.add_parser("prompt", help="write the base-still prompt, spec.json and run.json",
-                        description="Write the base-still prompt for one square 1024x1024 image on a flat key.")
-    add_spec_arguments(pp)
-    pp.add_argument("--output-dir", required=True, help="new folder (must not exist)")
-    pp.set_defaults(func=cmd_prompt)
-
-    pe = sub.add_parser("edit-prompt", help="prepare an edit prompt: reproduce the FIRST image exactly with ONE change",
-                        description="Build 'Reproduce the FIRST image exactly ... THE ONLY CHANGE: ...' with the "
-                                    "approved still as the FIRST reference; write the prompt only.")
-    source = pe.add_argument_group("the still to edit (the FIRST attached image)")
-    source.add_argument("--master", help="master.json (or its folder): its master.png, spec and recap are used")
-    source.add_argument("--run", help="output folder of prompt or edit-prompt (its spec.json is used)")
-    source.add_argument("--still", help="the supplied image to describe (overrides --master)")
-    change = pe.add_argument_group("the change")
-    change.add_argument("--change", help="THE ONLY CHANGE, e.g. 'repaint the face with a warm tan skin tone'")
-    change.add_argument("--change-file", help="UTF-8 text file holding the change")
-    change.add_argument("--keep", help=f"what stays exactly as in the FIRST image (default: {DEFAULT_KEEP})")
-    change.add_argument("--extra-reference", action="append", default=[],
-                        help="another attached image (SECOND, THIRD, ...), repeatable")
-    change.add_argument("--extra-role", action="append", default=[],
-                        help="what each --extra-reference is and how to use it, in the same order")
-    add_spec_arguments(pe)
-    pe.add_argument("--output-dir", required=True, help="new folder (must not exist)")
-    pe.set_defaults(func=cmd_edit)
-
     pd = sub.add_parser("pad", help="key, crop and LANCZOS-scale a still to the class framing on 1024x1024",
                         description="Flatten the backdrop to the pure key, find the subject with forge_matte, crop "
                                     "it with a 6 px margin and LANCZOS-scale it to the class framing; record the "
                                     "transform.")
     still = pd.add_argument_group("the still")
-    still.add_argument("--input", help="the generated still (any size, on a flat key or with real alpha)")
-    still.add_argument("--run", help="output folder of prompt or edit-prompt")
+    still.add_argument("--input", help="supplied character image (any size, flat background or alpha)")
     still.add_argument("--spec", help="spec JSON: class, facing and key come from it")
-    still.add_argument("--class", dest="klass", type=str, help="framing preset (default hero)")
-    still.add_argument("--facing", choices=FACINGS, help="left or right moves a mob's body behind centre "
+    still.add_argument("--class", dest="klass", type=str, help="framing label (default subject)")
+    still.add_argument("--facing", choices=FACINGS, help="facing direction for placement "
                                                         "(default none)")
     still.add_argument("--key", type=key_arg, help="key colour of the still (default #FF00FF)")
     add_pad_arguments(pd)
@@ -1184,7 +619,6 @@ def build_parser() -> argparse.ArgumentParser:
                                     f"({MASTER_SCHEMA}).")
     chosen = pa.add_argument_group("the chosen still")
     chosen.add_argument("--still", help="the chosen still (any route, or the host's own image tool)")
-    chosen.add_argument("--run", help="output folder of prompt or edit-prompt: its spec and prompt are used")
     chosen.add_argument("--route", help="provenance label for the supplied image (default external)")
     chosen.add_argument("--prompt-file", help="prompt that made --still (copied for provenance)")
     chosen.add_argument("--identity-recap", help="identity recap for motion prompts (default: the spec's recap, "

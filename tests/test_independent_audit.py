@@ -9,8 +9,6 @@ import test_comfyui_media as f
 import comfyui_forge_media as media,comfyui_forge_route_media as router
 import comfyui_forge_contracts as contracts,comfyui_forge_selection_tools as selection
 import comfyui_forge_gait_loop as cycle,comfyui_forge_deliver_animation as delivery
-import comfyui_forge_animation_review as reviewer
-import numpy as np
 from types import SimpleNamespace
 import contract_schema as schema
 
@@ -63,17 +61,6 @@ class IndependentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'minimum reduced-frame storage'):cycle._reduction_factor((32,32),65537)
             factor=cycle._reduction_factor((128,128),65536)
             self.assertLessEqual(65536*math.ceil(128/factor)**2*4,1024**2//4)
-    def test_auxiliary_reviewer_checks_budget_before_loading_frames(self):
-        with patch.dict('os.environ',{'COMFYUI_FORGE_ANALYSIS_MEMORY_MB':'1'}):
-            with patch.object(reviewer.Image,'open',side_effect=AssertionError('must budget before reading')):
-                with self.assertRaisesRegex(ValueError,'memory budget'):reviewer.features([Path('unused')]*5)
-    def test_reviewer_retains_best_recurrence_for_each_duration(self):
-        values=np.array([0,1,0,-1]*8,np.float32).reshape(-1,1,1,1)
-        candidates=reviewer.candidates(values,2,12)
-        self.assertTrue(candidates)
-        lengths=[row['frameCount'] for row in candidates]
-        self.assertEqual(len(lengths),len(set(lengths)))
-        self.assertTrue(any(length%4==0 for length in lengths))
     def test_invalid_server_schema_has_a_clear_pre_submission_error(self):
         with self.assertRaisesRegex(media.ComfyError,'JSON object'):media.seed_bounds(f.GRAPH,[('4','seed')],[])
     def test_core_rejects_a_selection_with_an_incompatible_playback_policy(self):

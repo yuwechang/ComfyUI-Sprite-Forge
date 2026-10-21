@@ -71,6 +71,13 @@ class UnifiedTests(unittest.TestCase):
             runner.run()
             self.assertIn(runner.astate('arbitrary')['status'],('blocked','needs-review'))
             self.assertEqual(len(runner.astate('arbitrary')['takes']),1)
+            take=runner.astate('arbitrary')['takes'][0]
+            keyed=runner.root/take['stages']['keyed']['dir']
+            self.assertEqual(len(list((keyed/'frames-clean').glob('*.png'))),12)
+            self.assertFalse((keyed/'sprite').exists())
+            self.assertFalse(list(keyed.rglob('*.gif')))
+            metadata=json.loads((keyed/'pipeline-meta.json').read_text())
+            self.assertEqual(set(metadata['outputs']),{'frames_raw','frames_clean','matte_report'})
             # Rerunning without missing information never submits another take.
             runner.run();self.assertEqual(len(runner.astate('arbitrary')['takes']),1)
             comfyui_forge_sprite_set.cmd_select(SimpleNamespace(plan=str(plan),action='arbitrary',take=1,range='0:12'))

@@ -1762,7 +1762,7 @@ class SetRunner:
     def run_key(self, ident: str, record: dict, out: Path) -> dict:
         job = self.root / self.astate(ident)["job"]["dir"]
         args = ["process", "--video", self.root / record["clip"]["path"], "--output-dir", out, "--matte", "soft",
-                "--reference", job / "master.png", "--key", self.entries[ident]["generationKey"], "--skip-sampling",
+                "--reference", job / "master.png", "--key", self.entries[ident]["generationKey"],
                 "--name", f"{ident}-t{record['take']:02d}"]
         if self.plan.get("matteProfile"):
             args += ["--matte-profile", self.root / self.plan["matteProfile"]["path"]]

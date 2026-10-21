@@ -195,7 +195,7 @@ def write_selection_files(stage: Path, documents: dict[str, Any]) -> None:
 
 
 def frame_paths(directory: Path, minimum: int = 2) -> list[Path]:
-    """Sorted ``*.png`` files: the same list and order as animation_review.sources()."""
+    """PNG frames in their source playback order."""
     directory = Path(directory)
     if not directory.is_dir():
         raise ValueError(f"frames directory not found: {directory}")

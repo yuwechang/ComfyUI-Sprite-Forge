@@ -230,21 +230,12 @@ class JobTests(unittest.TestCase):
 
     def test_obsolete_master_generation_commands_and_delegate_flags_are_gone(self):
         parser = comfyui_forge_master_still.build_parser()
-        for argv in [['generate'], ['edit'], ['prompt', '--media-cli', 'x'], ['prompt', '--media-arg=x']]:
+        for argv in [['generate'], ['edit'], ['prompt'], ['edit-prompt']]:
             with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 parser.parse_args(argv)
         self.assertFalse(hasattr(comfyui_forge_master_still, 'MediaCli'))
         self.assertFalse(hasattr(comfyui_forge_master_still, 'call_media'))
 
-    def test_local_master_prompt_and_edit_prompt_still_work(self):
-        flags = ['--name', 'hero', '--subject', 'a knight', '--identity', 'silver armor']
-        summary, code = comfyui_forge_master_still.run(['prompt', *flags, '--output-dir', str(self.root / 'prompt')])
-        self.assertEqual(code, 0)
-        self.assertTrue(Path(summary['prompt']).is_file())
-        summary, code = comfyui_forge_master_still.run(['edit-prompt', *flags, '--still', self.args.reference,
-                                         '--change', 'raise the sword', '--output-dir', str(self.root / 'edit')])
-        self.assertEqual(code, 0)
-        self.assertIn('raise the sword', Path(summary['prompt']).read_text())
 
     def test_batch_plan_preserves_decimal_seconds(self):
         args = comfyui_forge_sprite_set.build_parser().parse_args(['plan','--spec',confirmed(self.root), '--master', 'master.json', '--output-dir', 'new', '--motions-file','motions.json', '--duration', '2.25'])
