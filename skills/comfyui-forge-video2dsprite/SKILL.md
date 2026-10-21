@@ -35,7 +35,7 @@ Before preparing input or submitting video, read [motion planning and acceptance
 
 Each command's --help gives full flags. References cover registration, matte, finishing and standard delivery. No automatic retakes merely for an install check.
 
-For cycles, retain full-source context through automatic selection. If a cycle was selected before registration, use `comfyui_forge_register_clip.py apply --cycle-selection selection.json`, not a bare `--range`: it preserves the exact candidate and two successor frames. The selector reads this mapping and validates the same candidate after registration. Successor frames are hash-bound validation evidence and are excluded from final playback. Missing context, drift limits and failed closure are separate diagnostics; never relax closure thresholds to compensate for cropped evidence. See [pipeline context](references/pipeline.md#preserve-cycle-validation-context).
+For all three motion types, preserve candidate identity, source mapping, exact timing, key/event poses and validation dependencies through cropping, registration, retiming and delivery. If selecting before registration, use `comfyui_forge_register_clip.py apply --selection selection.json`; retime rebases that selection to registered frames without discarding its timeline or evidence. Single-play candidates retain their initial and terminal poses. Cycles additionally retain two successor frames for pose/velocity validation; these never enter playback. Do not move an event to a later pose, silently truncate a crop, change the motion contract or relax thresholds to compensate for missing evidence. See [candidate preservation](references/pipeline.md#preserve-candidate-identity-and-validation-context).
 
 ## Timing and receipts
 

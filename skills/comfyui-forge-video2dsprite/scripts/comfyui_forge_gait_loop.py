@@ -819,8 +819,69 @@ def verify_selection(selection: dict, selection_path: Path, frames_dir: Path, cl
     if provenance:
         original = provenance['sourceSelection']
         if comfyui_forge_core.sha256_file(Path(original['path'])) != original['sha256']:
-            raise ValueError('source cycle selection changed after registration')
+            raise ValueError('source selection changed after registration')
+    for row in selection['raw'].get('validationInputs', []):
+        if comfyui_forge_core.sha256_file(Path(row['path'])) != row['sha256']:
+            raise ValueError('selection validation input changed')
     return paths
+
+
+def selection_dependencies(selection: dict, path: Path, frames: Path) -> list[dict]:
+    rows = list(selection['raw'].get('validationInputs', []))
+    rows.append({'path': str(Path(path).resolve()), 'sha256': comfyui_forge_core.sha256_file(Path(path))})
+    provenance = selection['raw'].get('candidateProvenance')
+    if provenance:
+        rows.append(provenance['sourceSelection'])
+    for row in selection['raw'].get('closureEvidence', []):
+        rows.append({'path': str((Path(frames)/row['file']).resolve()), 'sha256': row['sha256']})
+    return list({row['path']: row for row in rows}.values())
+
+
+def registered_selection(frames: Path, clip: Clip) -> dict | None:
+    """Rebase one preserved candidate without changing its poses, clock or events."""
+    frames = Path(frames).resolve()
+    path = frames.parent/'registration.json'
+    if not path.is_file():
+        return None
+    registration = comfyui_forge_core.read_json(path)
+    mapping = registration.get('candidateSelection', registration.get('cycleCandidate'))
+    if not mapping:
+        return None
+    source = mapping['sourceSelection']
+    source_path = Path(source['path'])
+    if comfyui_forge_core.sha256_file(source_path) != source['sha256']:
+        raise ValueError('source cycle selection changed after registration' if registration.get('cycleCandidate')
+                         else 'source selection changed after registration')
+    original = read_selection(source_path)
+    source_frames = (source_path.parent/original['raw']['sourceDirectory']).resolve()
+    verify_selection(original, source_path, source_frames)
+    start, end = original['start'], original['endExclusive']
+    length = end-start
+    context = 2 if original['policy'] == 'cycle' else 0
+    if (original['fps'] != clip.fps or mapping['sourceRange'] != [start,end]
+            or mapping['registeredRange'] != [0,length] or clip.count != length+context
+            or mapping['contextSourceIndices'] != list(range(end,end+context))):
+        raise ValueError('registered candidate mapping or fps differs from its source selection')
+    records = registration['frames']
+    if len(records) != clip.count:
+        raise ValueError('registered candidate frame count changed')
+    for i,row in enumerate(records):
+        if ((path.parent/row['file']).resolve() != clip.paths[i].resolve()
+                or row['sha256'] != clip.hashes[i] or row['sourceIndex'] != start+i
+                or (i<length and row['sourceSha256'] != original['hashes'][i])):
+            raise ValueError('registered candidate frame mapping or checksum changed')
+    raw = {**original['raw'], 'sourceDirectory': str(frames), 'sourceHashes': clip.hashes[:length],
+           'sourceFiles': clip.names[:length], 'start': 0, 'endExclusive': length,
+           'sourceIndices': [i-start for i in original['indices']], 'candidateProvenance': mapping,
+           'validationInputs': selection_dependencies(original,source_path,source_frames)
+                               + [{'path':str(path),'sha256':comfyui_forge_core.sha256_file(path)}]}
+    raw['events'] = [{**event, **({'sourceIndex':event['sourceIndex']-start} if 'sourceIndex' in event else {})}
+                     for event in original['raw'].get('events', [])]
+    if context:
+        raw['closureEvidence'] = [{'sourceIndex':i,'file':clip.names[i],'sha256':clip.hashes[i]}
+                                  for i in range(length,length+context)]
+    return {**original,'raw':raw,'start':0,'endExclusive':length,'indices':raw['sourceIndices'],
+            'hashes':raw['sourceHashes'],'files':raw['sourceFiles']}
 
 
 _BACKGROUND = (238, 232, 220)
@@ -1187,36 +1248,20 @@ def cmd_select(args: argparse.Namespace) -> dict:
                        max_seconds=args.max_seconds)
     clip = analysis.clip
     candidate = parse_interval(args.candidate) if getattr(args, 'candidate', None) else None
-    provenance = None
-    registration_path = Path(args.frames_dir).resolve().parent / 'registration.json'
-    if registration_path.is_file():
-        registration = comfyui_forge_core.read_json(registration_path)
-        provenance = registration.get('cycleCandidate')
-        if provenance:
-            mapped = tuple(provenance['registeredRange'])
-            if candidate is not None and candidate != mapped:
-                raise ValueError('candidate differs from the cycle preserved during registration')
-            candidate = mapped
-            source = provenance['sourceSelection']
-            if comfyui_forge_core.sha256_file(Path(source['path'])) != source['sha256']:
-                raise ValueError('source cycle selection changed after registration')
-            original = read_selection(Path(source['path']))
-            if original['fps'] != clip.fps:
-                raise ValueError('registered cycle fps differs from its source selection')
-            length = original['endExclusive'] - original['start']
-            if (provenance['sourceRange'] != [original['start'], original['endExclusive']]
-                    or mapped != (0, length) or clip.count != length + 2
-                    or provenance['contextSourceIndices'] != [original['endExclusive'], original['endExclusive'] + 1]):
-                raise ValueError('registered cycle mapping differs from its source selection')
-            records = registration['frames']
-            if len(records) != clip.count:
-                raise ValueError('registered cycle frame count changed')
-            for i, row in enumerate(records):
-                if ((registration_path.parent / row['file']).resolve() != clip.paths[i].resolve()
-                        or row['sha256'] != clip.hashes[i]
-                        or row['sourceIndex'] != provenance['sourceRange'][0] + i
-                        or (i < length and row['sourceSha256'] != original['hashes'][i])):
-                    raise ValueError('registered cycle frame mapping or checksum changed')
+    preserved = registered_selection(Path(args.frames_dir), clip)
+    provenance = preserved['raw']['candidateProvenance'] if preserved else None
+    if preserved:
+        if preserved['policy'] != 'cycle':
+            raise ValueError('registered candidate is a one-shot; use retime with its preserved selection')
+        mapped = (preserved['start'], preserved['endExclusive'])
+        if candidate is not None and candidate != mapped:
+            raise ValueError('candidate differs from the cycle preserved during registration')
+        candidate = mapped
+        if (preserved['raw'].get('ticks') or preserved['raw'].get('events') or preserved['raw'].get('auto')
+                or 'retime' in preserved['raw'].get('method','').lower()
+                or len(set(preserved['indices'])) != len(preserved['indices'])
+                or preserved['durations'] != kept_durations(*mapped,preserved['indices'],clip.fps)):
+            raise ValueError('candidate has authored timing/events; use retime to preserve its timeline')
     rec = recommend(analysis, args.policy, candidate)
     w = rec["window"]
     indices = kept_indices(analysis, w["start"], w["endExclusive"])
@@ -1235,7 +1280,7 @@ def cmd_select(args: argparse.Namespace) -> dict:
                    "seam": seam, 'motionType': 'cycle',
                    'closureEvidence': [{'sourceIndex': i, 'file': clip.names[i], 'sha256': clip.hashes[i]}
                                        for i in (w['endExclusive'], w['endExclusive'] + 1)],
-                   **({'candidateProvenance': provenance} if provenance else {})})
+                   **({'candidateProvenance': provenance, 'validationInputs': preserved['raw']['validationInputs']} if provenance else {})})
         aids = None if args.no_aids else write_aids(analysis, rec, indices, durations, stage / "aids")
         write_selection_files(stage, {"selection.json": selection})
         checks = [{"id": "loop-found", "status": "pass", "value": [w["start"], w["endExclusive"]]},

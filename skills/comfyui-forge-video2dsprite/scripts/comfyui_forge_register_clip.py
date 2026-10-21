@@ -617,7 +617,7 @@ class ApplyPlan:
     min_run: int
     rest_frames: list[int]
     fx: bool
-    cycle_candidate: dict | None = None
+    candidate_selection: dict | None = None
 
 
 def _plan_apply(args: argparse.Namespace, character: dict[str, Any] | None) -> ApplyPlan:
@@ -641,25 +641,34 @@ def _plan_apply(args: argparse.Namespace, character: dict[str, Any] | None) -> A
     total = len(all_files)
     start, end = args.range if args.range else (0, None)
     candidate = None
-    if getattr(args, 'cycle_selection', None):
-        selection_path = Path(args.cycle_selection).resolve()
+    selection_arg = getattr(args, 'selection', None) or getattr(args, 'cycle_selection', None)
+    if selection_arg:
+        selection_path = Path(selection_arg).resolve()
         selection = gait.read_selection(selection_path)
-        if selection['policy'] != 'cycle':
+        selected_type = selection['raw'].get('motionType',selection['raw'].get('kind'))
+        if selected_type not in ('cycle','oneshot-return','oneshot-hold') or selection['policy'] not in ('cycle','oneshot'):
+            raise ValueError('--selection requires an explicit motion type and resolved playback contract')
+        if selected_type and job.data.get('motionType') not in (None,selected_type):
+            raise ValueError('selection motion contract differs from the prepared reference')
+        if getattr(args, 'cycle_selection', None) and selection['policy'] != 'cycle':
             raise ValueError('--cycle-selection requires a forward cycle selection')
         selected_files = gait.verify_selection(selection, selection_path, Path(args.frames))
         if [p.resolve() for p in selected_files] != [p.resolve() for p in all_files]:
-            raise ValueError('cycle selection requires the same ordered source frames; do not filter --pattern')
+            raise ValueError('selection requires the same ordered source frames; do not filter --pattern')
         start, candidate_end = selection['start'], selection['endExclusive']
-        if candidate_end + 2 > total:
+        context = 2 if selection['policy'] == 'cycle' else 0
+        if candidate_end + context > total:
             raise ValueError('[insufficient-context] cycle registration needs the two source frames after '
                              'the candidate; use the untrimmed source, not repeated or invented frames')
-        end = candidate_end + 2
+        end = candidate_end + context
         candidate = {'sourceSelection': {'path': str(selection_path),
                                         'sha256': comfyui_forge_core.sha256_file(selection_path)},
                      'sourceRange': [start, candidate_end],
                      'registeredRange': [0, candidate_end - start],
-                     'contextSourceIndices': [candidate_end, candidate_end + 1]}
-    end = total if end is None else min(end, total)
+                     'contextSourceIndices': list(range(candidate_end, end))}
+    if end is not None and end > total:
+        raise ValueError(f'candidate range ends at {end}, beyond the {total} source frames; no truncation was applied')
+    end = total if end is None else end
     if start >= end:
         raise ValueError(f"--range selects no frames out of {total}")
     files = all_files[start:end]
@@ -873,8 +882,8 @@ def _cmd_apply_once(args: argparse.Namespace) -> dict[str, Any]:
                             stage / "review-contact.png")
         document = _registration_document(args, plan, final, records, checks, master_sil, master_hip, master_anchor,
                                           band, rest_measures, targets, contact, character)
-        if plan.cycle_candidate:
-            document['cycleCandidate'] = plan.cycle_candidate
+        if plan.candidate_selection:
+            document['candidateSelection'] = plan.candidate_selection
         if getattr(args, "automatic_padding_receipt", None):
             document["automaticPadding"] = args.automatic_padding_receipt
         document["hygiene"] = {"mode": "floor", "floor": HYGIENE_FLOOR, "floor_px": hygiene["floor_px"],
@@ -1740,6 +1749,8 @@ def build_parser() -> argparse.ArgumentParser:
     interval.add_argument("--range", type=parse_range, help="START:END frames to register (0-based, end exclusive)")
     interval.add_argument('--cycle-selection', help='verified cycle selection.json; preserve its candidate '
                           'and register two successor frames for closure validation only')
+    interval.add_argument('--selection', help='verified selection.json of any motion type; preserve its '
+                          'candidate, timing, events and type-specific validation context')
     pa.add_argument("--action-padding", type=prep.parse_padding,
                     help="L,T,R,B source px; grows the canvas and shifts the anchor (default: the job's padding)")
     pa.add_argument("--fit", choices=FITS, help="provider canvas to video: auto (default), stretch, cover, contain")

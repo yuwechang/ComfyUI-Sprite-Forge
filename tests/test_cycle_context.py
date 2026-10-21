@@ -73,8 +73,8 @@ class CycleContextTests(unittest.TestCase):
         self.assertEqual(result['frames'],14)
         registered = self.root/'registered'
         metadata = json.loads((registered/'registration.json').read_text())
-        self.assertEqual(metadata['cycleCandidate']['sourceRange'],[12,24])
-        self.assertEqual(metadata['cycleCandidate']['contextSourceIndices'],[24,25])
+        self.assertEqual(metadata['candidateSelection']['sourceRange'],[12,24])
+        self.assertEqual(metadata['candidateSelection']['contextSourceIndices'],[24,25])
         selection = self.select(registered/'frames','registered-selection')
         document = json.loads(Path(selection['selection']).read_text())
         self.assertEqual((document['start'],document['endExclusive']),(0,12))
@@ -113,7 +113,7 @@ class CycleContextTests(unittest.TestCase):
             self.select(self.root/'registered/frames','different-candidate','1:13')
         path = Path(self.source_selection['selection'])
         path.write_text(path.read_text()+' ')
-        with self.assertRaisesRegex(ValueError, 'source cycle selection changed'):
+        with self.assertRaisesRegex(ValueError, 'source selection changed'):
             self.select(self.root/'registered/frames','changed-selection')
 
     def test_real_closure_failure_and_drift_have_distinct_diagnostics(self):

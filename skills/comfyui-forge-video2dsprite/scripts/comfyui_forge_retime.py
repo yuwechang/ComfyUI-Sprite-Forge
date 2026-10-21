@@ -271,7 +271,7 @@ def auto_oneshot(steps: np.ndarray, pose: np.ndarray, start: int, *, duration_ms
     """The played source frames, ticks and events of an automatically retimed one-shot.
 
     ``steps``/``pose`` cover source frames start, start+1, ...; ``keys`` hold absolute source frames.
-    The output starts on the frame before the onset (the rest pose) and ends on the settle frame.
+    The output retains the selected initial and terminal poses, plus authored key and event poses.
     """
     from comfyui_forge_motion_contract import validate_timing
     if len(steps)!=len(pose) or len(steps)<2:raise ValueError('motion profile needs matching arrays with at least two frames')
@@ -282,7 +282,7 @@ def auto_oneshot(steps: np.ndarray, pose: np.ndarray, start: int, *, duration_ms
     first = 0
     last = len(steps) - 1  # retain the selected initial and terminal poses for either one-shot contract
     kept = []
-    key_frames = {int(key["source"]) - start for key in keys}
+    key_frames = {int(key["source"]) - start for key in keys} | {source-start for _,source in event_sources}
     cut = 0
     hold_runs = []
     for a, b in phases["holds"]:
@@ -329,6 +329,28 @@ def auto_oneshot(steps: np.ndarray, pose: np.ndarray, start: int, *, duration_ms
                 share = Fraction(k - base, frame_b - base)
                 positions.append(min(pos_b, comfyui_forge_gait_loop.round_half_up(pos_a + (pos_b - pos_a) * share)))
     positions.append(len(kept) - 1)
+    protected = {0, len(positions)-1}
+    for frame, _position, hold, _name in pins[1:-1]:
+        protected.update(range(frame, min(len(positions), frame+max(1,hold))))
+    required_positions = sorted({kept.index(source-start) for _,source in event_sources})
+    if len(set(required_positions) | {0,len(kept)-1}) > len(positions):
+        raise ValueError('important event poses and endpoints exceed the output frame count; increase fps/count')
+    anchors = sorted(protected)
+    for left,right in zip(anchors,anchors[1:]):
+        required_here = [p for p in required_positions if positions[left]<p<positions[right]]
+        if len(required_here)>right-left-1:
+            raise ValueError('event pose cannot fit without changing a key or hold; increase fps/count')
+        next_slot = left+1
+        for n,required_position in enumerate(required_here):
+            last_slot = right-(len(required_here)-n)
+            k = min(range(next_slot,last_slot+1),key=lambda k:abs(positions[k]-required_position))
+            positions[k] = required_position
+            protected.add(k)
+            next_slot = k+1
+    anchors = sorted(protected)
+    for left,right in zip(anchors,anchors[1:]):
+        for k in range(left+1,right):
+            positions[k] = min(positions[right],max(positions[left],positions[k]))
     indices, ticks = [], []
     for position in positions:   # equal neighbours merge into one longer frame
         source = start + kept[position]
@@ -349,9 +371,8 @@ def auto_oneshot(steps: np.ndarray, pose: np.ndarray, start: int, *, duration_ms
                        "tick": frame_of[frame]})
     for name, source in event_sources:
         local = source - start
-        later = [k for k, position in enumerate(positions) if kept[position] >= local]
-        if later:
-            events.append({"name": name, "tick": frame_of[later[0]]})
+        exact = next(k for k, position in enumerate(positions) if kept[position] == local)
+        events.append({"name": name, "tick": frame_of[exact], 'sourceIndex': source})
     events.append({"name": "end", "tick": edges[-1]})
     info = {"onset": start + phases["onset"], "settle": start + phases["settle"], "first": start + first,
             "holds": [[start + a, start + b] for a, b in phases["holds"]], "cutFrames": cut,
@@ -367,8 +388,24 @@ def choose_frames(args: argparse.Namespace, clip: comfyui_forge_gait_loop.Clip, 
     """The played source frames from exactly one of --selection, --spans or --range."""
     count = clip.count
     chosen = {"selection": None, "weights": None}
+    preserved = comfyui_forge_gait_loop.registered_selection(Path(args.frames_dir),clip)
+    if preserved:
+        if args.range or args.spans:
+            raise ValueError('registered candidate already has a preserved selection; do not replace it with --range/--spans')
+        if args.selection:
+            source = preserved['raw']['candidateProvenance']['sourceSelection']['path']
+            if Path(args.selection).resolve() != Path(source).resolve():
+                preserved = None
+    if preserved:
+        if args.max_frames is not None:
+            raise ValueError('--max-frames applies to --range')
+        return {**chosen, 'selection':preserved, 'indices':list(preserved['indices']),
+                'weights':list(preserved['durations']), 'source':'preserved registered selection',
+                'window':(preserved['start'],preserved['endExclusive'])}
     if args.selection:
         selection = comfyui_forge_gait_loop.read_selection(args.selection)
+        if selection['fps'] is not None and selection['fps'] != fps:
+            raise ValueError('source fps differs from the selected candidate')
         comfyui_forge_gait_loop.verify_selection(selection, args.selection, args.frames_dir, clip)
         chosen.update(selection=selection, indices=list(selection["indices"]), weights=list(selection["durations"]),
                       source=f"selection {Path(args.selection).name}",window=(selection["start"],selection["endExclusive"]))
@@ -403,6 +440,8 @@ def timing(args: argparse.Namespace, kind: str, chosen: dict, fps: Fraction) -> 
     result = {"ticks": None, "tick_edges": None, "cadence": None}
     raw=chosen['selection']['raw'] if chosen['selection'] else {}
     if chosen['selection']:comfyui_forge_contracts.timeline(chosen['selection']['durations'],raw)
+    if raw.get('ticks'):
+        base = raw['ticks']
     if not flags and raw.get('ticks'):
         ticks=raw['ticks'];hz=raw.get('tickHz')
         if len(ticks)!=n or any(type(t) is not int or t<1 for t in ticks) or type(hz) is not int or hz<1:
@@ -460,13 +499,28 @@ def build_events(args: argparse.Namespace, timeline: dict) -> list[dict]:
         for event in raw.get('events',[]):
             if 'tick' in event:
                 if not old_ticks or type(old_hz) is not int or old_hz<1:raise ValueError('inherited event needs its tick timeline')
-                phase=Fraction(event['tick'],sum(old_ticks))
-            elif 'atMs' in event:phase=Fraction(str(event['atMs']))/sum(selection['durations'])
+                old_edges=[0]
+                for weight in old_ticks:old_edges.append(old_edges[-1]+weight)
+                time=Fraction(event['tick'])
+            elif 'atMs' in event:
+                old_edges=frame_starts(selection['durations'])
+                time=Fraction(str(event['atMs']))
             else:raise ValueError('inherited event has no timestamp')
-            if not 0<=phase<=1:raise ValueError('inherited event is outside the timeline')
-            mapped={'name':event['name'],'inheritedFrom':event}
-            if edges is not None:mapped['tick']=round(phase*edges[-1])
-            else:mapped['atMs']=round(phase*starts[-1])
+            if not 0<=time<=old_edges[-1]:raise ValueError('inherited event is outside the timeline')
+            position=_frame_at(old_edges,time)
+            source=selection['indices'][position]
+            if event.get('sourceIndex',source)!=source:
+                raise ValueError('inherited event timestamp differs from its required source pose')
+            mapped={'name':event['name'],'inheritedFrom':event,'sourceIndex':source}
+            target_edges=edges if edges is not None else starts
+            if time==old_edges[-1]:
+                target=target_edges[-1]
+            else:
+                offset=(time-old_edges[position])/(old_edges[position+1]-old_edges[position])
+                exact=(time/old_edges[-1]*target_edges[-1] if args.duration is not None else
+                       target_edges[position]+offset*(target_edges[position+1]-target_edges[position]))
+                target=min(target_edges[position+1]-1,max(target_edges[position],round(exact)))
+            mapped['tick' if edges is not None else 'atMs']=target
             inherited.append(mapped)
     custom = inherited+[parse_event(text, edges is not None) for text in args.event]
     if edges is not None and not any(event["name"] == "end" for event in custom):
@@ -493,6 +547,8 @@ def retime_auto(args: argparse.Namespace) -> dict:
     if args.policy not in (None, "oneshot"):
         raise ValueError("--auto-oneshot writes a oneshot policy")
     clip = comfyui_forge_gait_loop.load_clip(Path(args.frames_dir), fps, 1, allow_blank=True, keep_reduced=True)
+    if comfyui_forge_gait_loop.registered_selection(Path(args.frames_dir),clip):
+        raise ValueError('registered candidate has a preserved timeline; use --selection without --auto-oneshot')
     start, end = comfyui_forge_gait_loop.parse_interval(args.range)
     if end > clip.count:
         raise ValueError(f"--range ends after the last of {clip.count} frames")
@@ -555,6 +611,8 @@ def retime_auto(args: argparse.Namespace) -> dict:
 def retime(args: argparse.Namespace) -> dict:
     if getattr(args, "auto_oneshot", False):
         return retime_auto(args)
+    if args.key or args.output_fps:
+        raise ValueError('--key and --output-fps require --auto-oneshot; existing selection timing is retained by default')
     out = Path(args.output_dir)
     fps = comfyui_forge_gait_loop.parse_fps(args.fps)
     if args.tick_hz < 1:
@@ -567,6 +625,8 @@ def retime(args: argparse.Namespace) -> dict:
     kind = args.kind or (selection["raw"].get("motionType") or selection["raw"].get("kind") if selection else None)
     if kind not in KINDS:
         raise ValueError(f"--kind is required (one of {', '.join(KINDS)})")
+    if selection and selection['raw'].get('motionType', selection['raw'].get('kind')) not in (None,kind):
+        raise ValueError('retiming cannot change the selected motion contract')
     timeline = timing(args, kind, chosen, fps)
     durations, starts, ticks = timeline["durations"], timeline["starts"], timeline["ticks"]
     total = starts[-1]
@@ -579,6 +639,12 @@ def retime(args: argparse.Namespace) -> dict:
     events = build_events(args, timeline)
 
     extra: dict[str, Any] = {"motionType":kind}
+    if selection:
+        extra.update({key:selection['raw'][key] for key in ('closureEvidence','candidateProvenance','auto')
+                      if key in selection['raw']})
+        input_path = (Path(args.selection) if args.selection else
+                      Path(selection['raw']['candidateProvenance']['sourceSelection']['path']))
+        extra['validationInputs'] = comfyui_forge_gait_loop.selection_dependencies(selection,input_path,Path(args.frames_dir))
     if timeline["cadence"]:
         extra.update({key: timeline["cadence"][key] for key in ("cadenceMs", "strideWorldUnits", "speedRef", "cycles")})
     elif selection and selection["raw"].get("cycles"):

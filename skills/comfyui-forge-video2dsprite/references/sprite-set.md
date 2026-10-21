@@ -19,6 +19,8 @@ Use geometric options only when required by the actual footprint. No presumed fa
 
 Generation plans become immutable once state exists. A changed plan fails before cached results are reused; restore it and use per-take selection/timing revisions. QC failures remain visible in the review and are bound to its receipt; they are not silently converted to passes. Visual acceptance must address applicable QC findings.
 
+All three motion types share the candidate-preservation contract in [the pipeline](pipeline.md#preserve-candidate-identity-and-validation-context): source mappings, selected endpoints, authored timing/key/event poses and validation inputs survive every local stage. Cycles alone require successor-frame closure evidence. An event pose that cannot fit the playback budget stops processing rather than moving to a later source pose.
+
 Delivery writes a pending work receipt before publishing output. Resume verifies exact inputs, specification and all delivered file hashes, then adopts a completed publication. Missing or changed contents block recovery rather than overwriting the output. Continuous cycle selection never offers reverse playback as a fallback.
 
 Source timing retains authored events on exact source poses and rejects target phase/hold keys rather than ignoring them. Batch cycle selection does not author phase keys/events: use an explicitly authored selection through standalone timing/finalization when those controls are required. Incompatible combinations are rejected before generation.

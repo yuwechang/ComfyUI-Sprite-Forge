@@ -35,7 +35,8 @@ def source_provenance(finish,finished,source):
     if not expected:return {'status':'unverified','reason':'processing receipt lacks a video checksum'},dependencies
     if digest(source)!=expected:raise ValueError('retained MP4 differs from the video used to produce these frames')
     dependencies.append({'path':str(metadata),'sha256':digest(metadata)})
-    return {'status':'verified','sourceSha256':expected},dependencies
+    return {'status':'verified','sourceSha256':expected,'extraction':processing.get('extract'),
+            'sourceFps':processing.get('probe',{}).get('fps_rational')},dependencies
 
 
 def prepare(finished, selection_path, specification, source, work, required=()):
@@ -52,6 +53,33 @@ def prepare(finished, selection_path, specification, source, work, required=()):
     provenance,dependencies=source_provenance(finish,finished,source)
     original = (finished / finish['source']['frames']).resolve()
     original_files = comfyui_forge_gait_loop.verify_selection(selection, selection_path, original)
+    dependencies.extend(comfyui_forge_gait_loop.selection_dependencies(selection,selection_path,original))
+    dependencies.extend({'path':str(original_files[i]),'sha256':digest(original_files[i])}
+                        for i in range(selection['start'],selection['endExclusive']))
+    source_mapping = {i:{'sourceIndex':i,'sourceFile':p.name} for i,p in enumerate(original_files)}
+    registration = finish.get('source',{}).get('registration')
+    if registration:
+        registration_path = (finished/registration['path']).resolve()
+        registered = load(registration_path)
+        rows = registered['frames']
+        if len(rows) != len(original_files):
+            raise ValueError('registration/source frame count mismatch')
+        raw_folder = (registration_path.parent/registered['video']['frameDirectory']).resolve()
+        raw_files = comfyui_forge_gait_loop.frame_paths(raw_folder,1)
+        evidence = {row['sourceIndex'] for row in selection['raw'].get('closureEvidence',[])}
+        for i in set(range(selection['start'],selection['endExclusive'])) | evidence:
+            row = rows[i]
+            source_index = row['sourceIndex']
+            if (type(source_index) is not int or not 0<=source_index<len(raw_files)
+                    or source_index != registered['video']['range'][0]+i
+                    or (registration_path.parent/row['file']).resolve() != original_files[i]
+                    or row['sha256'] != digest(original_files[i])
+                    or raw_files[source_index].name != row['sourceFile']
+                    or digest(raw_files[source_index]) != row['sourceSha256']):
+                raise ValueError('registration source mapping or checksum changed')
+            dependencies.append({'path':str(raw_files[source_index]),'sha256':row['sourceSha256']})
+            source_mapping[i] = {'sourceIndex':source_index,'sourceFile':row['sourceFile'],
+                                 'sourceSha256':row['sourceSha256']}
     for row in selection['raw'].get('closureEvidence', []):
         dependencies.append({'path': str(original_files[row['sourceIndex']]), 'sha256': row['sha256']})
     provenance_selection = selection['raw'].get('candidateProvenance', {}).get('sourceSelection')
@@ -102,6 +130,7 @@ def prepare(finished, selection_path, specification, source, work, required=()):
         contact.save(stage/'review-contact.png')
         receipt = {'schema':'comfyui-forge.final-review/v1', 'status':'needs-visual-review',
                    'sourceIndices':picked, 'timing':timing, 'candidateInterval':[selection['start'],selection['endExclusive']],
+                   'sourceMapping':[{'outputFrame':n,'registeredIndex':i,**source_mapping[i]} for n,i in enumerate(picked)],
                    'candidateConfidence':selection['raw'].get('confidence'), 'finalSeam':seam,
                    'finalBounds':bounds, 'edgeTouchFrames':clipped,
                    'centroidXRange':[float(np.min(clip.cx[picked])),float(np.max(clip.cx[picked]))],

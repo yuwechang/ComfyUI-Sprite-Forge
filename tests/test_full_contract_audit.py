@@ -67,7 +67,8 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):retime.auto_oneshot(np.ones(20),np.linspace(0,1,20),5,duration_ms=1000,rate=Fraction(8),event_sources=[('signal',source)])
     def test_inherited_tick_events_keep_phase_and_exact_timeline(self):
         args=retime.build_parser().parse_args(['--frames-dir','unused','--fps','24','--selection','unused','--output-dir','unused'])
-        selected={'raw':{'ticks':[1,3,2],'tickHz':24,'events':[{'name':'signal','tick':2}]},'durations':[42,125,83]}
+        selected={'raw':{'ticks':[1,3,2],'tickHz':24,'events':[{'name':'signal','tick':2}]},
+                  'durations':[42,125,83],'indices':[5,6,7]}
         chosen={'selection':selected,'indices':[5,6,7],'weights':selected['durations']}
         timeline=retime.timing(args,'oneshot-hold',chosen,Fraction(24))
         self.assertEqual(timeline['ticks'],[1,3,2]);self.assertEqual(timeline['tick_hz'],24)

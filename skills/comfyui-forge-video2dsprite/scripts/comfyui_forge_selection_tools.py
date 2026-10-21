@@ -86,6 +86,8 @@ def playback_plan(selection, count, mode='loop', required=()):
         terminal = time == unit_total
         phase = time/unit_total
         position = min(len(indices)-1,bisect_right(edges,phase*edges[-1])-1)
+        if event.get('sourceIndex',indices[position]) != indices[position]:
+            raise ValueError('event timestamp differs from its required source pose')
         if not terminal: pinned.add(position)
         mapped.append((event,position,terminal,phase))
     if len(pinned) > count:
