@@ -1135,7 +1135,7 @@ def _lock_document(lock: Any) -> Mapping[str, Any]:
     if not isinstance(lock, Mapping) or lock.get("schema") != PALETTE_LOCK_SCHEMA:
         raise PaletteError(f"not a palette lock (schema {PALETTE_LOCK_SCHEMA})")
     if not isinstance(lock.get("colors"), list) or not lock["colors"]:
-        raise PaletteError("the palette lock lists no colors; re-create it with comfyui_forge_palette_tool.py lock")
+        raise PaletteError("the palette lock lists no colors; provide a nonempty reviewed palette lock")
     return lock
 
 

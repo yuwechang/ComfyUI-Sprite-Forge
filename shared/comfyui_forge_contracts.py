@@ -21,13 +21,19 @@ def size(value):
     return [integer(v,'dimension',1) for v in value]
 
 
+def final_rate(value):
+    rate = positive(value, 'final fps')
+    if not 4 <= rate <= 24:
+        raise ValueError('final fps must be between 4 and 24 inclusive')
+    return rate
+
+
 def final(value):
     if not isinstance(value,dict):raise ValueError('final specification must be an object')
     dimensions=size(value.get('size'))
     count=integer(value.get('frameCount'),'frameCount',1)
-    rate=positive(value.get('fpsRational',value.get('fps')),'fps')
+    rate=final_rate(value.get('fpsRational',value.get('fps')))
     duration=positive(value.get('durationRational',value.get('durationSeconds')),'durationSeconds')
-    if rate>100:raise ValueError('standard GIF preview supports at most 100 fps')
     if Fraction(count,1)/rate!=duration:raise ValueError('frameCount, duration and fps disagree')
     for field,exact in (('fps',rate),('durationSeconds',duration)):
         if field in value:
@@ -57,7 +63,8 @@ def source(value):
     if fps!=24:raise ValueError('source fps must be 24')
     cadence=value.get('cadence',{})
     if not isinstance(cadence,dict) or any(cadence.get(k,v)!=v for k,v in (('multiple',17),('offset',5),('minimum',5))):raise ValueError('source cadence differs from the fixed source formula')
-    count=max(5,round(float(requested)*24));count+=(5-count%17)%17
+    if requested>15:raise ValueError('requested source duration must not exceed 15 seconds')
+    count=max(5,round(float(requested)*24));count=min(345,count+(5-count%17)%17)
     if 'frameCount' in value and integer(value['frameCount'],'source frameCount',1)!=count:
         raise ValueError('source frameCount differs from the fixed source formula')
     if 'actualSeconds' in value and not math.isclose(float(positive(value['actualSeconds'])),count/24,rel_tol=1e-12,abs_tol=1e-12):

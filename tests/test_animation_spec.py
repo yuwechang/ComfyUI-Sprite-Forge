@@ -25,14 +25,14 @@ class SpecificationTests(unittest.TestCase):
     def test_initial_three_tiers_and_actual_duration(self):
         p = spec.plan(mode='loop')
         self.assertEqual(p['final']['frameCount'], 8)
-        self.assertEqual([s['size'] for s in p['sourceOptions'].values()], [[512, 512], [640, 640], [768, 768]])
+        self.assertEqual([s['size'] for s in p['sourceOptions'].values()], [[512, 512], [768, 768], [1024, 1024]])
         self.assertEqual(p['sourceOptions']['balanced']['frameCount'], 73)
         self.assertAlmostEqual(p['sourceOptions']['balanced']['actualSeconds'], 73 / 24)
 
-    def test_custom_final_drives_tiers_and_candidate_time(self):
+    def test_custom_final_keeps_fixed_tiers_and_drives_candidate_time(self):
         p = spec.plan(cell='64x64', duration=2, fps=12, mode='oneshot')
         self.assertEqual(p['final']['frameCount'], 24)
-        self.assertEqual([s['size'] for s in p['sourceOptions'].values()], [[256, 256], [320, 320], [384, 384]])
+        self.assertEqual([s['size'] for s in p['sourceOptions'].values()], [[512, 512], [768, 768], [1024, 1024]])
         self.assertEqual(p['sourceOptions']['balanced']['requestedSeconds'], 6)
         self.assertEqual(p['sourceOptions']['balanced']['frameCount'], 158)
 
@@ -65,13 +65,13 @@ class SpecificationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'at least the final'):
             spec.plan(cell='256x256', source_size='128x128', mode='loop')
 
-    def test_configured_minimum_merges_duplicate_sizes_with_fixed_cadence(self):
+    def test_configured_minimum_preserves_fixed_tiers_with_fixed_cadence(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'config.json'
             path.write_text(json.dumps({'fps': 24,
                                         'planning': {'minimum_source_size': [512, 512]}}))
             p = spec.plan(cell='32x32', config=path, mode='loop')
-            self.assertEqual(p['sourceOptions']['quality']['sameDimensionsAs'], 'performance')
+            self.assertEqual([o['size'] for o in p['sourceOptions'].values()], [[512, 512], [768, 768], [1024, 1024]])
             self.assertEqual(p['sourceOptions']['balanced']['frameCount'], 73)
             self.assertEqual(p['sourceOptions']['balanced']['actualSeconds'], 73 / 24)
 
@@ -84,7 +84,7 @@ class SpecificationTests(unittest.TestCase):
             self.assertEqual(spec.show(path)['settings']['source']['size'], [512, 512])
             with self.assertRaises(ValueError):spec.save(p, 'quality', path, True)
             spec.save(p, 'quality', path, True, True)
-            self.assertEqual(spec.show(path)['settings']['source']['size'], [768, 768])
+            self.assertEqual(spec.show(path)['settings']['source']['size'], [1024, 1024])
 
     def test_changed_workflow_requires_reconfirmation_and_stale_plan_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:

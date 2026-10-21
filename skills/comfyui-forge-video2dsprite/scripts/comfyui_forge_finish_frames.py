@@ -1355,8 +1355,7 @@ def finish_clip(frames_dir: str | os.PathLike, out_dir: str | os.PathLike, *, mo
                                                  "requestedAnchor": None if cell_anchor is None else list(cell_anchor)},
             "engine": {"sourceSize": list(sizes[0]["size"]), "sourceAnchor": list(sizes[0]["anchor"]),
                        "sampling": "nearest" if mode == "pixel" else "linear", "pixelArt": mode == "pixel",
-                       "note": "comfyui_forge_engine_export.py package --clean-dir <out>/frames --source-size W,H --source-anchor "
-                               "X,Y (no --registration; add --pixel-art --sampling nearest for pixel)"},
+                       "note": "Use these fixed cell dimensions and anchor through standard finalization; preserve the selected playback timing."},
             "resampler": "box",
             "restOutput": rest_output,
             "displaySizes": display,

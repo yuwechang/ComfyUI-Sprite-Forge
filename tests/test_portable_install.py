@@ -45,7 +45,7 @@ class PortableInstallTests(unittest.TestCase):
             self.assertFalse((base/'never-created').exists())
             planned=self.run_tool(dest/'comfyui-forge-video2dsprite/scripts/comfyui_forge_animation_spec.py','plan','--mode','loop','--config',config,cwd=base)
             self.assertEqual(planned.returncode,0,planned.stderr)
-            self.assertEqual(json.loads(planned.stdout)['sourceOptions']['balanced']['size'],[640,640])
+            self.assertEqual(json.loads(planned.stdout)['sourceOptions']['balanced']['size'],[768,768])
             self.assertEqual(json.loads(planned.stdout)['sourceOptions']['balanced']['frameCount'],73)
 
             self.assertEqual(self.run_tool(ROOT/'tools/comfyui_forge_install_skills.py','--check','--dest',dest).returncode,0)

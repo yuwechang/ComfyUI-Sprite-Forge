@@ -9,7 +9,7 @@ The specification confirms source canvas/duration and final cell/duration/fps/co
 4. `review --plan SET` locates final-size preview, contact sheet and review data. Check subject preservation, complete motion, timing, ending, registration and matte at delivery size. `accept --plan SET --action ID --take N --note TEXT` records the actual visual assessment and review hash.
 5. `run --plan SET` verifies that approval and creates the standard ZIP: selected transparent PNG frames, sprite sheet, GIF preview and original MP4. Intermediate reports stay in the work folder. PNGs and the confirmed timing contract are authoritative; GIF has binary transparency and 10 ms timing precision.
 
-Local validation/selection/finishing failures block the existing take. Re-running does not create another GPU job. Pending/unknown submissions keep their original receipt. Only an explicit `retake --plan SET --action ID --fix REASON` requests another take. `report --plan SET` writes progress separately from delivery. Optional engine transports are separate explicit tools, never batch delivery defaults.
+Local validation/selection/finishing failures block the existing take. Re-running does not create another GPU job. Pending/unknown submissions keep their original receipt. Only an explicit `retake --plan SET --action ID --fix REASON` requests another take. `report --plan SET` writes progress separately from delivery.
 
 Use geometric options only when required by the actual footprint. No presumed facing, airborne, support or named-action rules are imposed. A terminal hold is not replaced with the initial pose. The confirmed output specification controls dimensions and playback; incompatible overrides fail before generation.
 

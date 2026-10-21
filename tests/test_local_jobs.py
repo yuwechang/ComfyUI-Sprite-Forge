@@ -70,10 +70,10 @@ class JobTests(unittest.TestCase):
             self.assertFalse(Path(self.args.out_dir).exists())
 
     def test_fixed_formula_across_fractional_boundaries(self):
-        for i in range(1, 2000):
+        for i in range(1, 1441):
             seconds = i / 96
             n = max(5, round(seconds * 24))
-            self.assertEqual(comfyui_forge_frame_rules.frame_count(seconds), n + (5 - n % 17) % 17)
+            self.assertEqual(comfyui_forge_frame_rules.frame_count(seconds), min(345, n + (5 - n % 17) % 17))
             self.assertIs(type(comfyui_forge_frame_rules.frame_count(seconds)), int)
 
     def test_bad_timeouts_refused_before_output(self):

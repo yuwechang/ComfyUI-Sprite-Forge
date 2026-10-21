@@ -14,7 +14,7 @@ contracts at run time (shared/VENDORED.json).
 API
   schema_set(directory) -> SchemaSet: the *.schema.json documents of one folder (cached).
   SchemaSet.errors(instance, ref) -> ["$.json.path: message", ...]; empty when valid.
-      ref is "<file>#<json pointer>", for example "map.schema.json#/$defs/map_bundle_v2",
+      ref is "<file>#<json pointer>", for example "common.schema.json#/$defs/fpsValue",
       or an absolute URI that matches a document's $id.
   SchemaSet.contract_errors(instance, domain, definition): the same for
       "<domain>.schema.json#/$defs/<definition>".
@@ -244,7 +244,7 @@ class SchemaSet:
         self._by_id = by_id
 
     def document(self, name: str) -> Any:
-        """A loaded schema document by file name (map.schema.json) or $id."""
+        """A loaded schema document by file name (common.schema.json) or $id."""
         self._load()
         if name in self._by_name:
             return self._by_name[name][1]

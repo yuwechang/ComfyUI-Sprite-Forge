@@ -9,7 +9,7 @@
            the local ComfyUI adapter, comfyui_forge_video2dsprite.py process --matte soft, the numeric QC
            gates, automatic retakes with prompt fixes (up to --max-takes), comfyui_forge_register_clip.py
            apply, comfyui_forge_gait_loop.py select (loops) or comfyui_forge_retime.py (one-shots), comfyui_forge_finish_frames.py
-           hd|pixel, comfyui_forge_engine_export.py package and verify. Every step is recorded in
+           hd|pixel, then standard finalization and verified PNG/sheet/GIF/source delivery. Every step is recorded in
            set_state.json and takes.jsonl, so running it again resumes where it stopped.
   review   Contact sheet per action and take, a cast line-up and review.json, for the host
            agent to LOOK at before it accepts anything.

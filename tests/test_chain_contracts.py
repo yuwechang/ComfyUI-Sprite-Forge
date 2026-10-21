@@ -1,4 +1,4 @@
-"""Follow serialized retime output through both delivery paths and validators."""
+"""Follow serialized retime output through the standard delivery path and validation."""
 import json,sys,unittest,copy
 from unittest.mock import patch
 from PIL import Image
@@ -11,8 +11,6 @@ import test_workflow_improvements as fixtures
 import comfyui_forge_retime as retime
 import comfyui_forge_animation_spec as spec
 import comfyui_forge_finalize_animation as finalizer
-import comfyui_forge_engine_export as export
-import comfyui_forge_validate_animation as validate
 import comfyui_forge_schema as schema
 import comfyui_forge_animation_review as reviewer
 import comfyui_forge_gait_loop as cycle
@@ -21,7 +19,7 @@ import comfyui_forge_route_media as router
 import test_comfyui_media as media_fixture
 
 class ChainTests(unittest.TestCase):
-    def test_real_retime_selection_reaches_both_exports_and_final_validator(self):
+    def test_real_retime_selection_reaches_standard_delivery_and_schema(self):
         for kind in ('oneshot-return','oneshot-hold'):
             with self.subTest(kind=kind):
                 case=fixtures.WorkflowTests();case.setUp()
@@ -39,22 +37,9 @@ class ChainTests(unittest.TestCase):
                     finalizer.approve(case.root/'review',case.root/'delivery','Verified complete serialized test chain')
                     schemas=schema.SchemaSet(ROOT/'shared/schemas')
                     document=json.loads(selection.read_text());self.assertEqual(schemas.errors(document,'video.schema.json#/$defs/frame_selection_v2'),[])
-                    args=export.build_parser().parse_args(['package','--clean-dir',str(frames),'--selection',str(selection),
-                        '--out-dir',str(case.root/'advanced'),'--formats','png,packed','--key','green'])
-                    manifest=export.package(args)
-                    self.assertIn('signal.ready',[e['name'] for e in manifest['events']])
-                    self.assertEqual(manifest['sourceIndices'],review['sourceIndices'])
-                    self.assertEqual(manifest['durationSeconds'],1)
-                    self.assertEqual(next(e['atMs'] for e in manifest['events'] if e['name']=='signal.ready'),
-                                     next(e['atMs'] for e in review['timing']['events'] if e['name']=='signal.ready'))
-                    self.assertEqual(schemas.errors(manifest,'video.schema.json#/$defs/animation_v3'),[])
-                    findings=validate.validate([case.root/'advanced'],ffprobe=True)
-                    self.assertEqual(findings['failed'],[],str(findings['failed']))
-                    verified=export.verify_package(case.root/'advanced')
-                    self.assertEqual(verified['status'],'pass')
                 finally:case.tearDown()
 
-    def test_continuous_cycle_selection_reaches_both_exports_without_authored_rhythm(self):
+    def test_continuous_cycle_selection_reaches_standard_delivery_without_authored_rhythm(self):
         import math,hashlib
         from PIL import ImageDraw
         case=fixtures.WorkflowTests();case.setUp()
@@ -81,15 +66,9 @@ class ChainTests(unittest.TestCase):
             review=finalizer.prepare(finished,selection,specfile,source,case.root/'review')
             self.assertEqual(review['timing']['method'],'cycle-phase');self.assertEqual(review['timing']['events'],[])
             finalizer.approve(case.root/'review',case.root/'delivery','Reviewed synthetic forward cycle')
-            args=export.build_parser().parse_args(['package','--clean-dir',str(frames),'--selection',str(selection),
-                '--out-dir',str(case.root/'advanced'),'--formats','png,packed','--key','green'])
-            manifest=export.package(args);self.assertEqual(manifest['loopPolicy'],'cycle')
-            self.assertEqual(schema.SchemaSet(ROOT/'shared/schemas').errors(manifest,'video.schema.json#/$defs/animation_v3'),[])
-            self.assertEqual(validate.validate([case.root/'advanced'],ffprobe=True)['failed'],[])
-            self.assertEqual(export.verify_package(case.root/'advanced')['status'],'pass')
         finally:case.tearDown()
 
-    def test_bad_clock_or_motion_metadata_is_refused_by_both_delivery_paths(self):
+    def test_bad_clock_or_motion_metadata_is_refused_by_standard_delivery(self):
         for changed in [{'ticks':[1]*12,'tickHz':24}, {'motionType':'cycle','kind':'oneshot-hold'}, {'status':'rejected'}]:
             with self.subTest(changed=changed):
                 case=fixtures.WorkflowTests();case.setUp()
@@ -98,10 +77,6 @@ class ChainTests(unittest.TestCase):
                     document=json.loads(selection.read_text());document.update(changed);selection.write_text(json.dumps(document))
                     frames=case.root/'registered/frames'
                     with self.assertRaises(ValueError):finalizer.prepare(finished,selection,specfile,source,case.root/'review')
-                    args=export.build_parser().parse_args(['package','--clean-dir',str(frames),'--selection',str(selection),
-                           '--out-dir',str(case.root/'advanced'),'--formats','png','--key','green'])
-                    with self.assertRaises((ValueError,export.QualityGateError)):export.package(args)
-                    self.assertFalse((case.root/'review').exists());self.assertFalse((case.root/'advanced').exists())
                 finally:case.tearDown()
 
 class WorkflowChainTests(unittest.TestCase):

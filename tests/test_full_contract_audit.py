@@ -16,7 +16,6 @@ import comfyui_forge_gait_loop as cycle
 import comfyui_forge_finalize_animation as finalizer
 import comfyui_forge_media as media
 import comfyui_forge_frame_rules as rules
-import comfyui_forge_engine_export as engine
 import comfyui_forge_finish_frames as finish
 
 class ContractTests(unittest.TestCase):
@@ -62,9 +61,7 @@ class ContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'memory'):cycle.pairwise_l1(np.zeros((1000,1),np.float32))
         distances=cycle.pairwise_l1(np.array([[0,1],[2,4]],np.float32))
         self.assertEqual(distances.dtype,np.float32);self.assertEqual(float(distances[0,1]),5)
-    def test_only_explicit_tiers_and_forward_finishing(self):
-        with self.assertRaises(ValueError):engine.parse_tiers('actor')
-        self.assertEqual(engine.parse_tiers('requested:128@8')[0].edge,128)
+    def test_forward_finishing_policies(self):
         self.assertEqual(finish.LOOP_POLICIES,('cycle','oneshot'))
     def test_event_sources_outside_candidate_are_rejected(self):
         for source in [4,25]:

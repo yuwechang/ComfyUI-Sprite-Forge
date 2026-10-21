@@ -8,8 +8,6 @@ Verbs (deterministic only; no creative generation, no network):
   clean     -> chroma-key frames (soft matte by default) plus matte-report.json
   sample    -> even-index frame sets + fixed-envelope feet/center registration
   process   -> extract + clean + sample in one shot, plus pipeline-meta.json
-  package   -> engine_export package: animation.json 3.0, PNG atlas, alpha video, residue gate
-  verify    -> engine_export verify: decode every encoded file against the atlas
   doctor    -> functional ffmpeg capability probe
 
 Every verb that writes files takes a new --output-dir (--out-dir is the old
@@ -30,7 +28,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import functools
-import importlib.util
 import json
 import math
 import os
@@ -1727,24 +1724,10 @@ def cmd_key_plan(args: argparse.Namespace) -> int:
     return 0
 
 
-@functools.lru_cache(maxsize=1)
-def engine_module():
-    """The sibling comfyui_forge_engine_export.py (same skill), loaded once: package and verify are its verbs (D20)."""
-    spec = importlib.util.spec_from_file_location("forge_engine_export", Path(__file__).with_name("comfyui_forge_engine_export.py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
-def cmd_package(args: argparse.Namespace) -> int:
-    """engine_export package (D20): every 3.0 flag, the residue gate and its legacy switch; the one-line
-    summary names the output folder and the metadata file (animation.json)."""
-    return engine_module().cmd_package(args)
 
 
-def cmd_verify(args: argparse.Namespace) -> int:
-    """engine_export verify (D20): decode every encoded file of a package against its atlas."""
-    return engine_module().cmd_verify(args)
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -1872,20 +1855,6 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--skip-sampling",action="store_true",help="extract and key all source frames; defer selection to the motion pipeline")
     pp.set_defaults(func=cmd_process)
 
-    engine = engine_module()
-    pk = sub.add_parser("package", help="animation.json 3.0 package (engine_export package; same flags)",
-                        description="comfyui_forge_engine_export.py package: PNG poster and atlas, optional WebM, packed MP4 and "
-                                    "mobile tiers behind the key-residue gate (--allow-key-residue records an "
-                                    "override). --out-dir is the old name of --output-dir.")
-    engine.add_package_arguments(pk)
-    pk.set_defaults(func=cmd_package)
-
-    pv = sub.add_parser("verify", help="decode a package's video files against its atlas (engine_export verify)",
-                        description="comfyui_forge_engine_export.py verify: decode every encoded file completely, compare it with "
-                                    "the PNG atlas and write verify-qa.json only when every gate passes.")
-    engine.add_verify_arguments(pv)
-    pv.set_defaults(func=cmd_verify)
-
     pd = sub.add_parser("doctor", help="prove which ffmpeg encoders and decoders really work")
     pd.set_defaults(func=cmd_doctor)
 
@@ -1914,7 +1883,7 @@ def _run(argv: Sequence[str] | None = None) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     """Usage errors exit 2 (argparse); refused input and failed gates print ``error: ...`` and exit 1; anything
     unexpected prints ``error: internal error (...)`` and exits 1 (D26, D27; forge_core.run_cli)."""
-    expected = fc.CLI_EXPECTED_ERRORS + (FrameInputError, fa.ForgeAVError, engine_module().PackageError)
+    expected = fc.CLI_EXPECTED_ERRORS + (FrameInputError, fa.ForgeAVError)
     return fc.run_cli(_run, argv, expected=expected)
 
 

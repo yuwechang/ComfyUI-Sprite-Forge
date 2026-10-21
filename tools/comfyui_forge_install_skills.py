@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Install the Agent Sprite Forge skills into an agent's skills folder, or check an install for drift.
+"""Install the three ComfyUI-Sprite-Forge animation skills into an agent's skills folder, or check an install for drift.
 
   python tools/comfyui_forge_install_skills.py --check --host claude      report drift; exit 1 if any (default mode)
   python tools/comfyui_forge_install_skills.py --apply --host claude      back up, then replace the installed skills
-  python tools/comfyui_forge_install_skills.py --apply --dest .claude/skills --skills comfyui-forge-generate2dsprite,comfyui-forge-generate2dmap
+  python tools/comfyui_forge_install_skills.py --apply --dest .claude/skills --skills comfyui-forge-video2dsprite
 
 Hosts: claude (~/.claude/skills), codex ($CODEX_HOME/skills, default ~/.codex/skills), grok
 ($GROK_HOME/skills, default ~/.grok/skills) and agents (~/.agents/skills); --dest names any
@@ -91,9 +91,9 @@ def skill_files(folder: Path, *, everything: bool = False) -> dict[str, str]:
 
 def source_skills(source: Path, wanted: list[str] | None) -> list[str]:
     available = sorted(p.name for p in source.iterdir() if p.is_dir() and (p / "SKILL.md").is_file())
-    expected = {"comfyui-forge-" + name for name in ("codeart2d", "generate2dmap", "generate2dmedia", "generate2dsprite", "video2dsprite")}
+    expected = {"comfyui-forge-" + name for name in ("generate2dmedia", "generate2dsprite", "video2dsprite")}
     if set(available) != expected:
-        raise InstallError("This installer only manages the five comfyui-forge-* skills; original Sprite Forge skills are never installed or replaced")
+        raise InstallError("This installer only manages the three animation-core comfyui-forge-* skills; original Sprite Forge skills are never installed or replaced")
     if not available:
         raise InstallError(f"no skill folders with a SKILL.md in {source}")
     core={'comfyui-forge-'+n for n in ('generate2dmedia','generate2dsprite','video2dsprite')}
@@ -185,6 +185,7 @@ def apply(source: Path, dest: Path, skills: list[str], backup_dir: Path | None) 
     """Back up, stage, swap in, then write the manifest; any failure restores the old folders."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     previous=read_manifest(dest) or {}
+    # Migration only: retire legacy fork modules recorded in our own manifest; never original namespaces.
     optional={'comfyui-forge-codeart2d','comfyui-forge-generate2dmap'}
     retired=sorted((set(previous.get('skills',[])) & optional)-set(skills))
     existing = [s for s in [*skills,*retired] if (dest / s).exists()]
@@ -247,8 +248,7 @@ def build_parser() -> argparse.ArgumentParser:
     where = parser.add_mutually_exclusive_group(required=True)
     where.add_argument("--host", choices=("claude", "codex", "grok", "agents"), help="install into that host's skills folder")
     where.add_argument("--dest", help="any other skills folder (for example a project's .claude/skills)")
-    parser.add_argument("--include-extras",action="store_true",help="explicitly install optional map and code-art utilities with the animation core")
-    parser.add_argument("--skills", help="comma list of skill names (default: three animation core skills; map/code-art require explicit selection)")
+    parser.add_argument("--skills", help="comma list of animation-core skill names (the complete three-skill core is always installed)")
     parser.add_argument("--backup-dir", type=Path, help="new folder for the replaced copies "
                         "(default: <skills folder>.csf-backup-<UTC time> beside it)")
     parser.add_argument("--source", type=Path, default=REPO / "skills", help=argparse.SUPPRESS)
@@ -285,7 +285,6 @@ def main(argv: list[str] | None = None) -> int:
             if local_config["output_node"] not in graph:
                 raise InstallError("output_node is not in the workflow")
         wanted=[s.strip() for s in args.skills.split(',') if s.strip()] if args.skills else None
-        if args.include_extras:wanted=[p.name for p in source.iterdir() if p.is_dir() and (p/'SKILL.md').is_file()]
         skills = source_skills(source,wanted)
         dest = destination(args)
         if dest.resolve() == source:

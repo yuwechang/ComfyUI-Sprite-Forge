@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'comfyui-forge-gene
 from comfyui_forge_frame_rules import frame_count, validate_config, canvas_rules
 
 SCHEMA = 'comfyui-sprite-forge.spec/v1'
-FACTORS = {'performance': 4, 'balanced': 5, 'quality': 6}
+SOURCE_SIZES = {'performance': 512, 'balanced': 768, 'quality': 1024}
 DEFAULT_SETTINGS = '.comfyui-sprite-forge.preferences.local.json'
 
 
@@ -56,13 +56,11 @@ def workflow(path=None):
 
 def final_spec(cell, duration, fps, mode):
     cell = size(cell) if isinstance(cell, str) else comfyui_forge_contracts.size(cell)
-    duration, fps = positive(duration), positive(fps)
+    duration, fps = positive(duration), comfyui_forge_contracts.final_rate(fps)
     from comfyui_forge_motion_contract import MODES
     mode = MODES.get(mode, mode)
     if mode not in ('unspecified', 'loop', 'oneshot', 'hold'):
         raise ValueError('invalid playback mode')
-    if fps > 100:
-        raise ValueError('standard GIF delivery supports at most 100 fps; choose a lower preview rate first')
     count = duration * fps
     result = {'size': cell, 'durationSeconds': float(duration), 'durationRational': str(duration), 'fps': float(fps),
               'fpsRational': str(fps), 'frameCount': int(count) if count.denominator == 1 else None,
@@ -80,6 +78,8 @@ def source_spec(cell, requested, rate, rules):
     if any(c % rules['alignment'] for c in cell):
         suggestion = [math.ceil(c / rules['alignment']) * rules['alignment'] for c in cell]
         raise ValueError(f'source dimensions need alignment {rules["alignment"]}; suggested canvas {suggestion}; pad, do not stretch')
+    if any(c < 512 or c > 1024 for c in cell):
+        raise ValueError('source dimensions must each be between 512 and 1024')
     if any(c < m for c, m in zip(cell, rules['minimumSize'])):
         raise ValueError('source dimensions are below the configured workflow minimum')
     requested, rate = positive(requested), positive(rate)
@@ -94,7 +94,7 @@ def source_spec(cell, requested, rate, rules):
 
 def plan(cell='128x128', duration=1, fps=8, mode='unspecified', config=None,
          ratio='1:1', source_duration=None, source_fps=None, source_size=None,
-         envelope='1,1', preferred='balanced'):
+         envelope='1,1', preferred='balanced', source_factor=3):
     final = final_spec(cell, duration, fps, mode)
     rules = workflow(config)
     rules['finalSize'] = final['size']
@@ -102,19 +102,17 @@ def plan(cell='128x128', duration=1, fps=8, mode='unspecified', config=None,
     extra = [positive(x) for x in envelope.split(',')]
     if len(extra) != 2 or any(x < 1 for x in extra):
         raise ValueError('envelope must be width,height factors >= 1')
-    requested = positive(source_duration) if source_duration is not None else max(Fraction(3),positive(duration)*3,Fraction(final['frameCount'] or 0)*3/24)
+    factor = positive(source_factor)
+    if not 2 <= factor <= 3:
+        raise ValueError('source factor must be between 2 and 3')
+    requested = positive(source_duration) if source_duration is not None else min(Fraction(15), positive(duration)*factor)
+    if requested > 15:
+        raise ValueError('requested source duration must not exceed 15 seconds')
     rate = source_fps if source_fps is not None else rules['fps']
     options = {}
-    for name, factor in FACTORS.items():
-        w, h = [Fraction(v) * factor * e for v, e in zip(final['size'], extra)]
-        ratio_value = Fraction(*aspect)
-        w, h = max(w, h * ratio_value), max(h, w / ratio_value)
-        dims = [math.ceil(max(v, m) / rules['alignment']) * rules['alignment'] for v, m in zip((w, h), rules['minimumSize'])]
-        options[name] = source_spec(dims, requested, rate, rules)
-        for previous in list(options)[:-1]:
-            if dims == options[previous]['size']:
-                options[name]['sameDimensionsAs'] = previous
-                break
+    for number, (name, edge) in enumerate(SOURCE_SIZES.items(), 1):
+        options[name] = source_spec([edge, edge], requested, rate, rules)
+        options[name]['selectionNumber'] = number
     if source_size:
         options['custom'] = source_spec(size(source_size), requested, rate, rules)
         preferred = 'custom'
@@ -124,14 +122,18 @@ def plan(cell='128x128', duration=1, fps=8, mode='unspecified', config=None,
                 'source_requests_2_to_3_complete_candidates_not_3_seconds_of_final_playback']
     if not rules['minimumSizeVerified']:
         warnings.append('workflow_minimum_size_not_verified')
-    if requested < 3:
-        warnings.append('source_shorter_than_recommended_3_seconds')
+    if aspect != [1, 1] or extra != [1, 1]:
+        warnings.append('fixed_source_tiers_require_placement_review_not_automatic_enlargement')
+    if positive(duration)*factor > 15:
+        warnings.append('source_duration_capped_at_15_seconds_candidate_count_requires_review')
+    if frame_count(float(requested)) == 345:
+        warnings.append('source_actual_duration_limited_to_345_frames_14_375_seconds')
     return {'schema': SCHEMA, 'confirmed': False, 'final': final, 'sourceOptions': options,
             'recommendedTier': preferred, 'workflow': {k: v for k, v in rules.items() if k != 'finalSize'},
             'inputs': {'cell': 'x'.join(map(str, final['size'])), 'duration': str(positive(duration)),
                        'fps': str(positive(fps)), 'mode': mode, 'config': rules['configPath'],
                        'ratio': ratio, 'source_duration': str(requested), 'source_fps': str(positive(rate)),
-                       'source_size': source_size, 'envelope': envelope, 'preferred': preferred},
+                       'source_size': source_size, 'envelope': envelope, 'preferred': preferred, 'source_factor': str(factor)},
             'warnings': warnings, 'candidateTarget': {'minimum': 2, 'preferred': 3, 'priority': 'completeness_before_count'}}
 
 
@@ -180,11 +182,11 @@ def main(argv=None):
     p = sub.add_parser('plan')
     for name, default in [('cell', '128x128'), ('duration', '1'), ('fps', '8'), ('mode', 'unspecified'),
                           ('config', None), ('ratio', '1:1'), ('source-duration', None), ('source-fps', None),
-                          ('source-size', None), ('envelope', '1,1'), ('preferred', 'balanced')]:
+                          ('source-size', None), ('envelope', '1,1'), ('preferred', 'balanced'), ('source-factor', '3')]:
         p.add_argument('--' + name, default=default)
     p.add_argument('--out', help='optional work-directory JSON proposal, not user delivery')
     p = sub.add_parser('save')
-    p.add_argument('--plan', required=True);p.add_argument('--tier', choices=[*FACTORS, 'custom'], required=True)
+    p.add_argument('--plan', required=True);p.add_argument('--tier', choices=[*SOURCE_SIZES, 'custom'], required=True)
     p.add_argument('--settings', default=DEFAULT_SETTINGS);p.add_argument('--confirmed', action='store_true')
     p.add_argument('--replace', action='store_true')
     p = sub.add_parser('show');p.add_argument('--settings', default=DEFAULT_SETTINGS)

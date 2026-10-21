@@ -1,7 +1,0 @@
-interface:
-  display_name: "ComfyUI Forge codeart2d"
-  short_description: "Offline code-art tools on explicit request"
-  default_prompt: "Use $comfyui-forge-codeart2d. Follow the ComfyUI-only installation policy. Use only local ComfyUI for generation and local tools for processing; still-image generation is not configured."
-
-policy:
-  allow_implicit_invocation: false

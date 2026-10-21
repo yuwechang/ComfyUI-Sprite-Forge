@@ -13,7 +13,6 @@ import comfyui_forge_gait_loop as cycle,comfyui_forge_deliver_animation as deliv
 import comfyui_forge_animation_review as reviewer
 import numpy as np
 from types import SimpleNamespace
-import comfyui_forge_engine_export as engine
 import comfyui_forge_schema as schema
 
 class IndependentTests(unittest.TestCase):
@@ -78,39 +77,6 @@ class IndependentTests(unittest.TestCase):
         self.assertTrue(any(length%4==0 for length in lengths))
     def test_invalid_server_schema_has_a_clear_pre_submission_error(self):
         with self.assertRaisesRegex(media.ComfyError,'JSON object'):media.seed_bounds(f.GRAPH,[('4','seed')],[])
-    def test_generic_events_agree_in_advanced_export_and_schema(self):
-        schemas=schema.SchemaSet(ROOT/'shared/schemas')
-        for label in ['signal-ready','phase.2','marker','custom:existing']:
-            event={'name':label,'atMs':125}
-            self.assertEqual(engine._event_list([event],1000,'selection'),[event])
-            self.assertEqual(schemas.errors(event,'video.schema.json#/$defs/videoEvent'),[])
-        self.assertEqual(engine.LOOP_POLICIES,('cycle','oneshot'))
-        self.assertFalse(hasattr(engine,'bake_pingpong'))
-        args=SimpleNamespace(clean_dir='frames',out_dir='out',cycles=1.5)
-        with self.assertRaises(ValueError):engine.PackageOptions.from_args(args)
-    def test_advanced_package_accepts_real_generic_selection(self):
-        import hashlib
-        with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);frames=root/'frames';frames.mkdir()
-            for i in range(3):
-                image=Image.new('RGBA',(32,32));image.paste((180+i*20,90,30,255),(10,8,22,26));image.save(frames/f'{i:03}.png')
-            hashes=[hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(frames.glob('*.png'))]
-            document={'schema':cycle.SELECTION_V2,'sourceDirectory':'frames','sourceHashes':hashes,'start':0,'endExclusive':3,
-                      'sourceIndices':[0,1,2],'durations_ms':[125]*3,'fps':8,'loopPolicy':'oneshot','kind':'oneshot-return',
-                      'motionType':'oneshot-return','ticks':[1]*3,'tickHz':8,'events':[{'name':'signal-ready','atMs':125,'tick':1}],
-                      'status':'selected-needs-visual-review','method':'reviewed generic candidate'}
-            schemas=schema.SchemaSet(ROOT/'shared/schemas')
-            self.assertEqual(schemas.errors(document,'video.schema.json#/$defs/frame_selection_v2'),[])
-            path=root/'selection.json';path.write_text(json.dumps(document))
-            args=engine.build_parser().parse_args(['package','--clean-dir',str(frames),'--out-dir',str(root/'package'),
-                  '--selection',str(path),'--formats','png','--key','magenta'])
-            manifest=engine.package(args)
-            self.assertIn('signal-ready',[event['name'] for event in manifest['events']])
-            self.assertEqual(schemas.errors(manifest,'video.schema.json#/$defs/animation_v3'),[])
-            manifest['cycles']=1.5
-            self.assertTrue(schemas.errors(manifest,'video.schema.json#/$defs/animation_v3'))
-            document['kind']='run'
-            self.assertTrue(schemas.errors(document,'video.schema.json#/$defs/frame_selection_v2'))
     def test_core_rejects_a_selection_with_an_incompatible_playback_policy(self):
         selected={'indices':[0,1],'durations':[500,500],'start':0,'endExclusive':2,'policy':'cycle','raw':{}}
         with self.assertRaisesRegex(ValueError,'policy'):selection.playback_plan(selected,8,'hold')

@@ -4,6 +4,8 @@ import math
 FPS = 24
 MULTIPLE = 17
 OFFSET = MINIMUM = 5
+MAX_SECONDS = 15
+MAX_FRAMES = 345  # greatest 17k+5 not exceeding 15 * 24
 
 
 def validate_config(config):
@@ -22,8 +24,10 @@ def frame_count(duration, fps=FPS):
     duration = float(duration)
     if not math.isfinite(duration) or duration <= 0 or fps != FPS:
         raise ValueError("duration must be finite positive seconds and source fps must be 24")
+    if duration > MAX_SECONDS:
+        raise ValueError('requested source duration must not exceed 15 seconds')
     count = max(5, round(duration * 24))
-    return count + (5 - (count % 17)) % 17
+    return min(MAX_FRAMES, count + (5 - (count % 17)) % 17)
 
 
 def from_config(config, duration):

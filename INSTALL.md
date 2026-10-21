@@ -11,7 +11,7 @@
 5. **建立私人設定。** 依 docs/WORKFLOW.md 解析 API JSON，建立 local-comfyui/config.local.json，設定正確 bindings、output_node 與模型影格規則。workflow 可以是檔案的絕對路徑，也可相對 config.local.json；不要改動使用者原始 workflow，必要時另存副本。個人設定與 workflow.local.json 已被 .gitignore 排除。
 6. **安裝所有技能。** 用選定 Python 執行下方安裝命令，不加 `--skills` 以免漏裝。安裝程式會備份本修改版舊檔、複製 scripts/references/agents、寫獨立 manifest 及 `comfyuiConfig` 指向。這個指向讓已安裝的工具自動找到設定，不需寫入全域 FORGE_* 或 Codex 設定。
 7. **分開驗證。** 執行 installer --check、tools/comfyui_forge_test_release.py；用已安裝路徑的 comfyui_forge_media.py --check，再用使用者提供的、尺寸合法的圖片與短提示詞執行 --dry-run。未提供圖片時先完成安裝及唯讀檢查，並說明尚未執行 dry-run；不要宣稱全部完成。只有使用者另外要求生成測試時才 POST GPU 任務。
-8. **回報。** 列出永久 repository、Python、skills 路徑、實際安裝的核心與選用技能、config/workflow 路徑、檢查結果及任何缺項，告知開新對話／必要時重啟。不把「skills 檔案安裝成功」混同「ComfyUI 已能生成」或「畫面品質通過」。
+8. **回報。** 列出永久 repository、Python、skills 路徑、實際安裝的三個核心技能、config/workflow 路徑、檢查結果及任何缺項，告知開新對話／必要時重啟。不把「skills 檔案安裝成功」混同「ComfyUI 已能生成」或「畫面品質通過」。
 
 如果使用者尚未安裝／啟動 ComfyUI，仍可準備依賴與設定文件，但不能宣稱生成環境通過。不要自動下載模型、安裝 custom nodes 或切換雲端。
 
@@ -71,6 +71,6 @@ $env:COMFYUI_FORGE_CONFIG = (Resolve-Path local-comfyui/config.local.json).Path
 
 ## 核心範圍與檔名
 
-預設安裝三個角色動畫核心：`comfyui-forge-generate2dmedia`、`comfyui-forge-generate2dsprite`、`comfyui-forge-video2dsprite`。地圖與程式繪圖保留為選用工具，只有明確加 `--include-extras` 或以 `--skills` 指定才安裝。更新時，先前由此專案管理的未選用工具會先備份再移出；原版技能與其他技能不受影響。
+本修改版只包含並安裝三個角色動畫核心：`comfyui-forge-generate2dmedia`、`comfyui-forge-generate2dsprite`、`comfyui-forge-video2dsprite`。地圖與程式繪圖請另行使用原版 Agent Sprite Forge，本專案不附帶、不安裝，也沒有 `--include-extras` 選項。從舊版更新時，只對本修改版 manifest 曾記錄管理的兩個加前綴舊模組先備份再移出；未受本專案管理的目錄、原版技能與其 manifest 保持不動。
 
 Skill 名稱及資料夾使用 `comfyui-forge-`；Python 實體檔名、模組匯入與呼叫統一使用 `comfyui_forge_`，以符合 Python 匯入語法。舊檔不保留轉接殼。執行 `tools/comfyui_forge_test_release.py` 會核對實體入口、批次映射、共用副本及完整測試。

@@ -34,11 +34,20 @@ def write_gif(images, duration, target):
     return delays
 
 
+def sheet_columns(count, columns=None):
+    """Use one row below eight frames, otherwise two rows; explicit layouts remain supported."""
+    cols = (count if count < 8 else (count + 1) // 2) if columns is None else comfyui_forge_contracts.integer(columns, 'columns', 1)
+    if not 1 <= cols <= count:
+        raise ValueError('columns must be between 1 and frame count')
+    return cols
+
+
 def deliver(frames, source, output, specification, columns=None, report=None):
     frames, source, output = Path(frames).resolve(), Path(source).resolve(), Path(output).resolve()
     specification=comfyui_forge_contracts.confirmed(specification)
     spec=specification['final']
     count, cell = spec['frameCount'], tuple(spec['size'])
+    cols = sheet_columns(count, columns)
     if spec['status'] != 'ready' or count is None or spec['mode'] == 'unspecified':
         raise ValueError('resolve final timing and playback mode first')
     rate, duration = Fraction(str(spec['fpsRational'])), Fraction(str(spec['durationRational']))
@@ -62,7 +71,7 @@ def deliver(frames, source, output, specification, columns=None, report=None):
             raise ValueError('output already exists without a verifiable delivery receipt; inspect it before continuing')
         receipt=json.loads(receipt_path.read_text(encoding='utf-8'))
         current_frames=[hashlib.sha256(p.read_bytes()).hexdigest() for p in paths]
-        if (receipt.get('columns')!=(min(8,count) if columns is None else comfyui_forge_contracts.integer(columns,'columns',1)) or receipt.get('specification')!=spec or receipt.get('frameSha256')!=current_frames
+        if (receipt.get('columns')!=cols or receipt.get('specification')!=spec or receipt.get('frameSha256')!=current_frames
                 or receipt.get('sourceSha256')!=hashlib.sha256(source.read_bytes()).hexdigest()):
             raise ValueError('existing delivery belongs to different inputs or specification')
         expected=receipt.get('outputSha256',{})
@@ -82,9 +91,6 @@ def deliver(frames, source, output, specification, columns=None, report=None):
             if im.size != cell or im.mode != 'RGBA':
                 raise ValueError('all finished frames must be RGBA at the confirmed final cell size')
             images.append(im.copy())
-    cols = min(8,count) if columns is None else comfyui_forge_contracts.integer(columns,'columns',1)
-    if not 1 <= cols <= count:
-        raise ValueError('columns must be between 1 and frame count')
     rows = math.ceil(count / cols)
     ms = round(duration * 1000)
     ticks = round(duration * 100)
@@ -137,7 +143,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--frames', required=True);parser.add_argument('--source', required=True)
     parser.add_argument('--out-dir', required=True);parser.add_argument('--spec', required=True)
-    parser.add_argument('--columns', type=int);parser.add_argument('--report')
+    parser.add_argument('--columns', type=int, help='explicit layout override; default: one row below 8 frames, two rows from 8 frames');parser.add_argument('--report')
     args = parser.parse_args(argv)
     try:
         spec = json.loads(Path(args.spec).read_text(encoding='utf-8-sig'))

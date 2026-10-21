@@ -6,9 +6,7 @@
       "owner": "A1-forge-core",
       "targets": [
         "skills/comfyui-forge-generate2dsprite/scripts/comfyui_forge_core.py",
-        "skills/comfyui-forge-generate2dmap/scripts/comfyui_forge_core.py",
-        "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_core.py",
-        "skills/comfyui-forge-codeart2d/scripts/comfyui_forge_core.py"
+        "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_core.py"
       ]
     },
     {
@@ -16,7 +14,6 @@
       "owner": "A2-forge-matte",
       "targets": [
         "skills/comfyui-forge-generate2dsprite/scripts/comfyui_forge_matte.py",
-        "skills/comfyui-forge-generate2dmap/scripts/comfyui_forge_matte.py",
         "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_matte.py"
       ]
     },
@@ -24,32 +21,20 @@
       "canonical": "shared/comfyui_forge_av.py",
       "owner": "A5-forge-av",
       "targets": [
-        "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_av.py",
-        "skills/comfyui-forge-generate2dmap/scripts/comfyui_forge_av.py"
+        "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_av.py"
       ]
     },
     {
       "canonical": "shared/comfyui_forge_palette.py",
       "owner": "B04-palette-pixel",
       "targets": [
-        "skills/comfyui-forge-generate2dsprite/scripts/comfyui_forge_palette.py",
         "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_palette.py"
-      ]
-    },
-    {
-      "canonical": "shared/comfyui_forge_nav.py",
-      "owner": "integration (D4)",
-      "targets": [
-        "skills/comfyui-forge-generate2dmap/scripts/comfyui_forge_nav.py",
-        "skills/comfyui-forge-codeart2d/scripts/comfyui_forge_nav.py"
       ]
     },
     {
       "canonical": "shared/comfyui_forge_schema.py",
       "owner": "integration (D31)",
       "targets": [
-        "skills/comfyui-forge-generate2dmap/scripts/comfyui_forge_schema.py",
-        "skills/comfyui-forge-codeart2d/scripts/comfyui_forge_schema.py",
         "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_schema.py"
       ]
     },
@@ -57,19 +42,8 @@
       "canonical": "shared/schemas/common.schema.json",
       "owner": "A0-contracts",
       "targets": [
-        "skills/comfyui-forge-generate2dsprite/references/schemas/common.schema.json",
-        "skills/comfyui-forge-generate2dmap/references/schemas/common.schema.json",
         "skills/comfyui-forge-video2dsprite/references/schemas/common.schema.json",
-        "skills/comfyui-forge-codeart2d/references/schemas/common.schema.json",
         "skills/comfyui-forge-generate2dmedia/references/schemas/common.schema.json"
-      ]
-    },
-    {
-      "canonical": "shared/schemas/sprite.schema.json",
-      "owner": "A0-contracts",
-      "targets": [
-        "skills/comfyui-forge-generate2dsprite/references/schemas/sprite.schema.json",
-        "skills/comfyui-forge-codeart2d/references/schemas/sprite.schema.json"
       ]
     },
     {
@@ -77,21 +51,6 @@
       "owner": "A0-contracts",
       "targets": [
         "skills/comfyui-forge-video2dsprite/references/schemas/video.schema.json"
-      ]
-    },
-    {
-      "canonical": "shared/schemas/map.schema.json",
-      "owner": "A0-contracts",
-      "targets": [
-        "skills/comfyui-forge-generate2dmap/references/schemas/map.schema.json",
-        "skills/comfyui-forge-codeart2d/references/schemas/map.schema.json"
-      ]
-    },
-    {
-      "canonical": "shared/schemas/codeart.schema.json",
-      "owner": "A0-contracts",
-      "targets": [
-        "skills/comfyui-forge-codeart2d/references/schemas/codeart.schema.json"
       ]
     },
     {
@@ -106,7 +65,6 @@
       "owner": "core-contracts",
       "targets": [
         "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_contracts.py",
-        "skills/comfyui-forge-generate2dsprite/scripts/comfyui_forge_contracts.py",
         "skills/comfyui-forge-generate2dmedia/scripts/comfyui_forge_contracts.py"
       ]
     },

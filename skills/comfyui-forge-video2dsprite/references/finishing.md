@@ -25,9 +25,8 @@ publishes nothing. Success prints one ASCII JSON line. Errors print `error: ...`
 2. `comfyui_forge_finish_frames.py hd` or `pixel`: finished frames.
 3. `comfyui_forge_gait_loop.py select` or `comfyui_forge_retime.py`. A selection made on the registered frames
    still applies, because finished frames keep the source file names and order.
-4. `comfyui_forge_engine_export.py package --clean-dir <fin>/frames --source-size W,H --source-anchor X,Y`.
-   Take W,H and X,Y from `finish.json` `size` and `anchor`, and pass no
-   `--registration`. A pixel finish adds `--pixel-art --sampling nearest`.
+4. `comfyui_forge_finalize_animation.py prepare/approve`: apply the selected playback slots, review at final size, and deliver the standard PNG sequence, sheet, GIF and source MP4. Use the final specification and keep scale/placement unchanged.
+
 
 ## HD finish (default)
 
@@ -221,8 +220,7 @@ both files; it prints `error: lineup rule failed: ...` and exits 1.
 
 - **Rest pose and scale:** `rest` (frame, top, feet, height and area in source px,
   stance x, centroid), `anchorSource`, `scale`, `scaleSource`, `targetHeight`, `scaleRef`.
-- **Geometry:** `size` and `anchor` (1x, output px), `engine` (the engine_export
-  geometry flags), `displaySizes`.
+- **Geometry:** `size` and `anchor` (1x, output px), `engine` (legacy field name for fixed cell geometry metadata), `displaySizes`.
 - **Measured rest pose:** `restOutput` (nominal and measured rest height and area at 1x).
 - **Pixel settings:** `palette`, `pixel` (threshold, margin, band, cleanup, downscale,
   supersample, lift, outline and `outlinePx`, `coloursPerFrameMax`, the per-frame
@@ -277,12 +275,7 @@ saved nothing.
 
 ## Packaging note
 
-engine_export's key-residue gate flags outer-ring pixels with min(R, B) - G > 20 under a
-magenta key. A deep crimson design colour such as (186, 12, 33) scores 21. At 60 px a red
-scarf is a large share of the silhouette ring, so a clean finish can be refused for its
-design colour. Check which colours were flagged. If they belong to the design, package
-with `--allow-key-residue`, which records the override. Real key fringe is fixed when
-keying (`clean --erode N`), never by finishing.
+Inspect the finished alpha edges and design colours on light and dark backgrounds before standard finalization. Resolve real key residue in the matte stage; finishing and packaging do not restore missing source pixels. Use the selected frames and confirmed specification with `comfyui_forge_finalize_animation.py prepare/approve`.
 
 ## Library
 

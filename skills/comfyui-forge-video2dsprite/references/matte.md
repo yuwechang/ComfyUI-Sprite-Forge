@@ -57,17 +57,7 @@ is one JSON line naming the output and its metadata file.
 
 4. Read the report's `status`, `checks` and `warnings`, then look at the frames over a
    light and a dark background before registering (`comfyui_forge_register_clip.py apply`) and
-   packaging them:
-
-   ```text
-   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" package --clean-dir work/subject-motion/frames-clean --output-dir assets/subject-motion --name subject-motion --fps 24 --formats png,webm,packed --loop
-   python "<skill-dir>/scripts/comfyui_forge_video2dsprite.py" verify --package assets/subject-motion
-   ```
-
-   `package` and `verify` are `comfyui_forge_engine_export.py`'s verbs with every flag
-   ([pipeline.md](pipeline.md)): its key-residue gate reads the key from
-   `frames-clean/matte-report.json`, and `--allow-key-residue` is the legacy switch that
-   ships residue with a recorded override.
+   finishing and delivering them through `comfyui_forge_finalize_animation.py prepare/approve` with the reviewed selection and final specification. Source matte failures must be resolved before visual approval; do not hide key residue in an unrelated export path.
 
 ## Matte modes (`--matte`)
 
