@@ -1,13 +1,4 @@
-"""Offline, non-destructive frame review and explicit interval export.
-
-  review  local HTML reviewer with recurrence candidate intervals
-  select  classify candidate intervals (valid 1-cycle, valid 2-cycle, rejected with the
-          reasons) with gait_loop's period analysis; writes a v2 frame selection
-  cut     byte-preserved export of a v1 interval or a v2 selection (holds, retimed order)
-
-Candidate intervals are recurrence diagnostics, never automatic motion approval.
-No interpolation, per-frame normalization, generation, or network access.
-"""
+"""Offline, non-destructive frame review and explicit interval export."""
 from __future__ import annotations
 
 import argparse
@@ -166,9 +157,7 @@ def review(directory: Path, out: Path, fps: float, minimum: int, maximum: int, p
     adjacent = np.abs(np.diff(values, axis=0)).mean(axis=tuple(range(1, values.ndim)))
     with Image.open(paths[0]) as im:
         size = list(im.size)
-    # Paths are relative to the review folder, or only the name across drives (forge_core.manifest_path; the
-    # sha256 values are the binding). The reviewer page saves selections with the bare folder name: a
-    # downloaded file has no known location, and cut checks the hashes (r2-conventions finding 5).
+    # Selection paths may be relative or filenames across drives; hashes bind the source frames.
     report = {"schema": "forge-animation-review/v1", "status": "needs-visual-review",
               "sourceDirectory": comfyui_forge_core.manifest_path(directory, out),
               "sourceDirectoryName": directory.resolve().name, "sourceSize": size,
@@ -189,7 +178,7 @@ def review(directory: Path, out: Path, fps: float, minimum: int, maximum: int, p
         for i, path in enumerate(paths):
             with Image.open(path) as im:
                 im.thumbnail((preview_size, preview_size), Image.Resampling.LANCZOS)
-                # Straight alpha with RGB zeroed under alpha 0 (Appendix D): LANCZOS ringing leaves colour there.
+                # Straight alpha with RGB zeroed under alpha 0: LANCZOS ringing leaves colour there.
                 comfyui_forge_core.save_png(im, stage / report["frames"][i]["preview"])
         if [signature(path) for path in paths] != source_hashes:
             raise ValueError("source frames changed during review; no review published")
@@ -345,7 +334,8 @@ def select(directory: Path, out: Path, fps, kind: str = "cycle", minimum: int = 
 
 def cut_selection(directory: Path, out: Path, selection_path: Path) -> dict:
     """Byte-preserved export of a forge-frame-selection/v2: frames in played order (holds and
-    reversals repeat the same bytes) plus selection.json rebased onto the cut folder."""
+    reversals repeat the same bytes) plus selection.json rebased onto the cut folder.
+    """
     if out.exists():
         raise ValueError("output directory already exists")
     selection = comfyui_forge_gait_loop.read_selection(selection_path)
@@ -426,7 +416,7 @@ def _run(argv=None) -> int:
         if args.selection:
             if any(v is not None for v in (args.start, args.end, args.fps)):
                 raise ValueError("use selection OR start/end/fps, not both")
-            data = comfyui_forge_core.read_json(args.selection, strict=True)  # UTF-8 with or without a BOM (D28)
+            data = comfyui_forge_core.read_json(args.selection, strict=True)
             if not isinstance(data, dict):
                 raise ValueError("selection must be a JSON object")
         if data is not None and data.get("schema") == comfyui_forge_gait_loop.SELECTION_V2:
@@ -454,8 +444,6 @@ def _run(argv=None) -> int:
 
 
 def main(argv=None) -> int:
-    """Refused input prints ``error: ...`` and anything unexpected ``error: internal error (...)`` (D27); both
-    leave through SystemExit(1), as the review and cut verbs always did. Usage errors exit 2."""
     code = comfyui_forge_core.run_cli(_run, argv, expected=comfyui_forge_core.CLI_EXPECTED_ERRORS + (KeyError, TypeError))
     if code:
         raise SystemExit(code)

@@ -1,4 +1,3 @@
-"""Independent boundary regressions; no network, service lifecycle or GPU use."""
 import copy,json,math,sys,tempfile,unittest
 from pathlib import Path
 from fractions import Fraction
@@ -13,7 +12,7 @@ import comfyui_forge_gait_loop as cycle,comfyui_forge_deliver_animation as deliv
 import comfyui_forge_animation_review as reviewer
 import numpy as np
 from types import SimpleNamespace
-import comfyui_forge_schema as schema
+import contract_schema as schema
 
 class IndependentTests(unittest.TestCase):
     def prepare(self,config,graph=None,last=None):
@@ -88,7 +87,7 @@ class IndependentTests(unittest.TestCase):
     def test_schema_requires_the_actual_v2_playback_fields(self):
         document={'schema':cycle.SELECTION_V2,'sourceDirectory':'frames','sourceHashes':['a'*64],
                   'start':0,'endExclusive':1,'status':'selected-needs-visual-review'}
-        schemas=schema.SchemaSet(ROOT/'shared/schemas')
+        schemas=schema.SchemaSet(ROOT/'tests/schemas')
         self.assertTrue(schemas.errors(document,'video.schema.json#/$defs/frame_selection_v2'))
     def test_selection_motion_metadata_cannot_contradict_its_policy(self):
         for raw,policy in [({'kind':'run'},'cycle'),({'kind':'cycle','motionType':'oneshot-hold'},'cycle'),({'motionType':'cycle'},'oneshot')]:

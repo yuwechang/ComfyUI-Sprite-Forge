@@ -1,8 +1,4 @@
-"""Verify one selected candidate, materialize final frames, review, then deliver.
-
-prepare creates review aids and receipts only. approve requires a review note and
-unchanged inputs; it writes the standard four-kind delivery through deliver_animation.
-"""
+"""Verify one selected candidate, materialize final frames, review, then deliver."""
 import comfyui_forge_contracts
 import argparse
 from fractions import Fraction

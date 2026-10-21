@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
-"""Install the three ComfyUI-Sprite-Forge animation skills into an agent's skills folder, or check an install for drift.
-
-  python tools/comfyui_forge_install_skills.py --check --host claude      report drift; exit 1 if any (default mode)
-  python tools/comfyui_forge_install_skills.py --apply --host claude      back up, then replace the installed skills
-  python tools/comfyui_forge_install_skills.py --apply --dest .claude/skills --skills comfyui-forge-video2dsprite
-
-Hosts: claude (~/.claude/skills), codex ($CODEX_HOME/skills, default ~/.codex/skills), grok
-($GROK_HOME/skills, default ~/.grok/skills) and agents (~/.agents/skills); --dest names any
-other skills folder. Only the skill folders of this checkout are managed (those with a
-SKILL.md); other skills in the destination are never touched.
-
-Copied: every file of each skill except __pycache__, *.pyc/*.pyo, dot files and OS junk,
-so a working tree never ships bytecode. --apply first copies each installed skill folder it
-will replace to a backup folder beside the skills folder (--backup-dir to choose; it must not
-exist), stages the new copies beside the skills folder, swaps them in and writes
-<skills folder>/.comfyui-sprite-forge.install.json (every file with its sha256, the source
-commit). Any failure restores the previous folders and writes no manifest.
-
---check compares the checkout with the installed copies: missing, changed (marked "edited
-locally" when the installed file no longer matches the manifest, "outdated" when the
-checkout moved on) and extra files. What an install never ships is never drift either:
-__pycache__ and bytecode that running an installed skill writes, dot files and OS junk
-are skipped on both sides (D24). comfyui_forge_doctor.py reads the same manifest to report local
-drift with the same rule. Stdlib only.
-"""
+"""Install or check the three ComfyUI-Sprite-Forge animation skills."""
 from __future__ import annotations
 
 import argparse
@@ -51,15 +27,13 @@ class InstallError(Exception):
 
 
 def _local_utf8_stdio() -> None:
-    """Never crash on an unencodable character; this tool itself prints ASCII."""
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="backslashreplace")
 
 
 def _ascii(text: object) -> str:
-    """Console-safe ASCII (Appendix D): non-ASCII characters, such as a user name in a path, become
-    backslash escapes on every console code page, not only on one that cannot encode them."""
+    """Escape non-ASCII characters for consistent console output across code pages."""
     return str(text).encode("ascii", "backslashreplace").decode("ascii")
 
 
@@ -72,7 +46,6 @@ def sha256_file(path: Path) -> str:
 
 
 def shipped(relative: Path) -> bool:
-    """Whether a file inside a skill folder belongs in an install."""
     if any(part in SKIP_DIRS or part.startswith(".") for part in relative.parts[:-1]):
         return False
     name = relative.name
@@ -80,7 +53,6 @@ def shipped(relative: Path) -> bool:
 
 
 def skill_files(folder: Path, *, everything: bool = False) -> dict[str, str]:
-    """{posix path relative to the skills root: sha256} for one skill folder."""
     files = {}
     for path in sorted(folder.rglob("*")):
         relative = path.relative_to(folder)
@@ -142,7 +114,8 @@ def drift(source: Path, dest: Path, skills: list[str]) -> list[tuple[str, str]]:
     """[(kind, path)] where kind is missing, changed (edited locally), changed (outdated),
     changed or extra; an empty list means the install matches the checkout. Installed files that
     an install never ships (shipped() is false: __pycache__, bytecode, dot files, OS junk) are not
-    extras: running an installed skill writes them (D24)."""
+    extras: running an installed skill writes them.
+    """
     manifest = read_manifest(dest)
     installed_as = {item["path"]: item.get("sha256") for item in manifest["files"]} if manifest else {}
     problems = []
@@ -225,7 +198,7 @@ def apply(source: Path, dest: Path, skills: list[str], backup_dir: Path | None) 
                     "backup": backup.name if existing else None}
         _write_manifest(dest, manifest)
     except BaseException:
-        for skill in reversed(swapped):  # put every replaced folder back
+        for skill in reversed(swapped):
             if (dest / skill).exists():
                 os.rename(dest / skill, stage / "new" / skill)
             if (stage / "old" / skill).exists():
@@ -312,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
     except (InstallError, OSError) as exc:
         print(_ascii(f"error: {exc}"), file=sys.stderr)
         return 1
-    except Exception as exc:  # noqa: BLE001  (D27: tracebacks are never user-facing)
+    except Exception as exc:  # noqa: BLE001
         print(_ascii(f"error: internal error ({type(exc).__name__}: {exc})"), file=sys.stderr)
         return 1
     print(json.dumps(summary, ensure_ascii=True))

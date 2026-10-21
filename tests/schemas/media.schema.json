@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Local ComfyUI media contracts",
+  "$id": "media.schema.json",
   "$defs": {
     "job": {
       "type": "object",
@@ -109,32 +109,6 @@
           }
         }
       ]
-    },
-    "doctor": {
-      "type": "object",
-      "required": [
-        "status",
-        "routes",
-        "imageGeneration"
-      ],
-      "properties": {
-        "status": {
-          "enum": [
-            "ok",
-            "incompatible",
-            "error",
-            "offline"
-          ]
-        },
-        "routes": {
-          "const": [
-            "local:comfyui"
-          ]
-        },
-        "imageGeneration": {
-          "const": false
-        }
-      }
     }
   }
 }

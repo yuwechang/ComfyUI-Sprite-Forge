@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Keep the vendored copies of shared/ files identical to their canonicals.
-
-Skills never import across skill folders, so every skill ships its own copy of
-the shared modules and contract schemas. shared/VENDORED.json maps each
-canonical file to those copies.
-
-  python tools/comfyui_forge_vendor_sync.py --check    report drift; exit 1 if any (default)
-  python tools/comfyui_forge_vendor_sync.py --write    copy each canonical over stale or missing copies
-
-Text files are compared with CRLF normalised to LF, so Windows autocrlf and
-Linux checkouts agree; --write copies exact bytes and never edits a canonical.
-A canonical that does not exist yet is skipped unless --strict or
-FORGE_VENDOR_STRICT=1 is set. A copy without its canonical, and a file inside
-skills/ that carries a vendored file name without being listed, are errors.
-"""
+"""Synchronize shared modules and schemas using shared/VENDORED.json."""
 from __future__ import annotations
 
 import argparse
@@ -42,21 +28,19 @@ class Entry:
 @dataclass
 class Report:
     drift: list[tuple[str, str, str]] = field(default_factory=list)  # (kind, target, canonical); --write fixes these
-    problems: list[str] = field(default_factory=list)  # --write cannot fix these
+    problems: list[str] = field(default_factory=list)
     pending: list[str] = field(default_factory=list)  # canonicals not created yet
     in_sync: int = 0
 
 
 def _local_utf8_stdio() -> None:
-    """Never crash on an unencodable character; this tool itself prints ASCII."""
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="backslashreplace")
 
 
 def _ascii(text: object) -> str:
-    """Console-safe ASCII (Appendix D): non-ASCII characters, such as a folder name in --root, become
-    backslash escapes on every console code page, not only on one that cannot encode them."""
+    """Escape non-ASCII characters for consistent console output across code pages."""
     return str(text).encode("ascii", "backslashreplace").decode("ascii")
 
 

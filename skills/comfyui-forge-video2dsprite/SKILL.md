@@ -1,6 +1,6 @@
 ---
 name: comfyui-forge-video2dsprite
-description: Animate supplied characters through local ComfyUI, or process supplied videos into transparent registered sprite animations, loops, GIF previews and engine exports. Use for character animation; still-image generation is not configured.
+description: Animate supplied characters through local ComfyUI, or process supplied videos into transparent registered sprite animations, loops, GIF previews and standard PNG/sheet/GIF/MP4 delivery. Use for character animation; still-image generation is not configured.
 ---
 
 # Local character animation

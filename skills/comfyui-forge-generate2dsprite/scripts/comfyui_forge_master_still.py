@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""Prepare prompts, inspect, pad and approve user-supplied master stills.
-
-Commands: prompt, edit-prompt, pad, approve. All processing is local;
-this tool does not generate images or invoke generation providers.
-"""
+"""Prepare prompts, inspect, pad and approve user-supplied master stills."""
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import re
 import shutil
 import sys
@@ -33,8 +28,8 @@ RUN_SCHEMA = "generate2dsprite.master_run.v1"
 PAD_SCHEMA = "generate2dsprite.master_pad.v1"
 
 CANVAS = 1024                    # the master canvas is square
-CROP_MARGIN_PX = 6               # game-opus55 pad: the subject is cropped with a 6 px margin
-EDGE_SAFE_PX = 16                # a placed subject keeps this far from the canvas edge
+CROP_MARGIN_PX = 6               # Crop margin around the subject, in source pixels.
+EDGE_SAFE_PX = 16                # Minimum subject clearance from the canvas edge, in pixels.
 MIN_PART_AREA = 24               # source px; smaller alpha islands are specks
 GEOMETRY_ALPHA = comfyui_forge_core.ALPHA_GEOMETRY_THRESHOLD  # alpha > 16 counts for geometry
 DEFAULT_KEY = "#FF00FF"
@@ -58,11 +53,7 @@ DEFAULT_EXTRA_ROLE = "an extra reference for THE ONLY CHANGE below: use it only 
 
 @dataclass(frozen=True)
 class ClassPreset:
-    """Framing of one character class on the 1024 canvas, from the game-opus55 pads.
-
-    ``subject_height_px`` / ``top_margin_px`` / ``lead_px`` are the pad target (identical for every
-    character of the class); ``prompt_top_pct`` / ``prompt_bottom_pct`` are what the prompt asks the
-    generator for (it draws larger than asked; the pad normalises it)."""
+    """Shared padding dimensions and prompt framing for one character class."""
 
     name: str
     subject_height_px: int
@@ -78,7 +69,6 @@ class GeometryPresets(dict):
     def __missing__(self,name):
         return ClassPreset(str(name),768,128,0,12,12,'figure','neutral geometry; explicit dimensions override it')
 CLASSES=GeometryPresets({'subject':ClassPreset('subject',768,128,0,12,12,'figure','neutral framing')})
-
 
 
 @dataclass(frozen=True)
@@ -107,8 +97,6 @@ STYLES = {
         "art"),
 }
 
-
-# --------------------------------------------------------------------------- small helpers
 
 _ARTICLE = re.compile(r"^(?:a|an|the)\s+", re.I)
 
@@ -214,8 +202,6 @@ def file_ref(path: Path, base: Path, *, size: bool = False) -> dict[str, Any]:
     return ref
 
 
-# --------------------------------------------------------------------------- spec
-
 def _ref_from_spec(value: Any, field: str, base: Path) -> dict[str, Any]:
     """A reference entry of a spec file: a path string or {path, ...}; relative paths use ``base``."""
     if isinstance(value, str):
@@ -310,7 +296,7 @@ def _normalise_ref(ref: dict[str, Any], field: str, *, attach: bool, warnings: l
     for key in REF_FIELDS[field][2:]:
         value = ref.get(key)
         if key == "do_not_copy" and isinstance(value, str) and not value.strip():
-            out[key] = ""  # an explicit empty value drops the "do NOT copy" clause
+            out[key] = ""
             continue
         text = clean_text(value, f"{field}.{key}")
         if text is not None:
@@ -406,8 +392,6 @@ def identity_recap(spec: dict[str, Any]) -> str:
         recap = f"{strip_period(strip_article(spec['subject']))} ({strip_period(spec['identity'])})"
     return strip_period(strip_article(recap))
 
-
-# --------------------------------------------------------------------------- prompts
 
 def default_view(spec: dict[str, Any]) -> str:
     if spec.get("view"):
@@ -519,7 +503,7 @@ def size_paragraph(spec: dict[str, Any]) -> str:
 
 
 def build_prompt(spec: dict[str, Any]) -> str:
-    """The base-still prompt of the game-opus55 recipe (base_kanetsugu.txt), for one square image."""
+    """Build a square master-still prompt from the selected style and framing."""
     style = STYLES[spec["finish"]]
     for_genre = f" for {strip_period(spec['genre'])}" if spec.get("genre") else ""
     paragraphs = [f"Create exactly ONE square image ({CANVAS}x{CANVAS}).",
@@ -552,8 +536,6 @@ def build_edit_prompt(spec: dict[str, Any], *, change: str, keep: str | None, ro
     return "\n\n".join([f"Create exactly ONE square image ({CANVAS}x{CANVAS}).", " ".join(lines), reproduce, only,
                         f"{background_sentence(spec)} {ban_sentence(spec)}"]) + "\n"
 
-
-# --------------------------------------------------------------------------- pad
 
 @dataclass(frozen=True)
 class Framing:
@@ -597,7 +579,6 @@ def key_subject(pixels: np.ndarray, key_hex: str, matte: str) -> tuple[np.ndarra
     keyed,report=comfyui_forge_background_input.extract(pixels,pixel_art=matte=='hard')
     report.update(requested=matte,quality='flat-background')
     return keyed,report
-
 
 
 def subject_parts(alpha: np.ndarray, min_area: int) -> dict[str, Any]:
@@ -735,8 +716,6 @@ def describe_framing(path: Path, key_hex: str, noun: str) -> str | None:
             "right edge")
 
 
-# --------------------------------------------------------------------------- documents
-
 def run_document(command: str, spec: dict[str, Any], stage: Path, *, references: Sequence[tuple[str, Path]],
                  warnings: list[str], edit: dict[str, Any] | None = None) -> dict[str, Any]:
     doc: dict[str, Any] = {
@@ -767,7 +746,6 @@ def load_run(path: str | Path) -> tuple[Path, dict[str, Any]]:
     if not isinstance(doc, dict) or doc.get("schema") != RUN_SCHEMA:
         raise ValueError(f"{run_file.as_posix()} is not a {RUN_SCHEMA} record.")
     return run_file.resolve().parent, doc
-
 
 
 def load_master(path: str | Path) -> tuple[Path, dict[str, Any]]:
@@ -841,8 +819,6 @@ def validate_master(doc: Any) -> list[str]:
         errors.append("route must be a non-empty string")
     return errors
 
-
-# --------------------------------------------------------------------------- commands
 
 def _write_prompt_and_spec(stage: Path, spec: dict[str, Any], prompt: str) -> None:
     (stage / "prompt.txt").write_bytes(prompt.encode("utf-8"))
@@ -1094,8 +1070,6 @@ def cmd_approve(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             "warnings": len(warnings)}, 0
 
 
-# --------------------------------------------------------------------------- parser
-
 def add_spec_arguments(parser: argparse.ArgumentParser, *, with_spec_file: bool = True) -> None:
     group = parser.add_argument_group("spec (a --spec JSON file and/or these flags; flags win)")
     if with_spec_file:
@@ -1245,7 +1219,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2; refused input exits 1 (forge_core.run_cli)."""
     return comfyui_forge_core.run_cli(_run, argv)
 
 

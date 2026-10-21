@@ -1,4 +1,3 @@
-"""Behavior regressions for arbitrary motion labels and flat input backgrounds."""
 import json
 from pathlib import Path
 import sys
@@ -21,6 +20,29 @@ import comfyui_forge_sprite_set
 from batch_fixture import confirmed
 
 class GenericTests(unittest.TestCase):
+    def test_raw_qc_uses_motion_endpoints_without_a_template_calm_span(self):
+        import comfyui_forge_register_clip as registration
+        source=self.root/'qc-master.png'
+        Image.fromarray(self.art((0,255,0),0)).save(source)
+        for kind in mc.TYPES:
+            with self.subTest(kind=kind):
+                prepared=self.root/('qc-'+kind)
+                args=prep.build_parser().parse_args(['prepare','--master',str(source),
+                    '--motion-type',kind,'--description','requested motion','--canvas','128,128',
+                    '--output-dir',str(prepared)])
+                result=prep.cmd_prepare(args)
+                frames=prepared/'raw';frames.mkdir()
+                for i in range(3):
+                    (frames/f'{i:03}.png').write_bytes((prepared/'input.png').read_bytes())
+                takes=prepared/'takes.jsonl'
+                args=registration.build_parser().parse_args(['qc','--job',result['metadata'],
+                    '--frames',str(frames),'--fps','24','--takes',str(takes)])
+                registration.cmd_qc(args)
+                record=json.loads(takes.read_text())
+                endpoints=record['metrics']['calm']
+                self.assertEqual(endpoints['start'],[0,0])
+                self.assertEqual(endpoints['end'],[2,2] if kind=='oneshot-return' else None)
+
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name)
     def tearDown(self): self.tmp.cleanup()

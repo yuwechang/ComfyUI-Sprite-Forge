@@ -1,4 +1,3 @@
-"""Randomize only a fresh submission, and freeze its seed for all resume paths."""
 import copy,json,unittest
 from pathlib import Path
 from unittest.mock import patch

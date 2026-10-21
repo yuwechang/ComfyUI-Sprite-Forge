@@ -1,45 +1,5 @@
 #!/usr/bin/env python3
-"""Finish registered clips into game-ready frames: HD (the default) or pixel art.
-
-  hd             The default finish. One scale per clip from the rest pose: --target-height
-                 (output px of the rest-pose body; frame 0 or --rest-frame) or --scale-ref
-                 (a sibling clip's finish.json: its scale x sqrt(rest-area ratio), clamped
-                 to +-3 percent). Premultiplied box (area) downscale with
-                 forge_core.resample_rgba on a grid pinned to the anchor (the stance midpoint
-                 on the feet line), then forge_core.alpha_hygiene. Never nearest, never an
-                 upscale. --display-sizes 1x,2x re-derives every size from the source frames.
-  pixel          Bold pixel art from the same registration: a crisp downscale (each output
-                 pixel takes the dominant of two OKLab colour clusters of its 4x4 sub-pixels,
-                 so edges do not blur into in-between colours and thin dark lines and eyes
-                 survive), a light contrast and saturation lift, one OKLab palette of at
-                 most --colors (default 32) colours (--palette, or built from the clip and
-                 spaced so no two colours are closer than --shade-gap, OKLab dE 0.04), no
-                 dither, temporal hysteresis (forge_palette.quantize_sequence), lone-pixel
-                 cleanup that keeps eyes and highlights, speck cleanup, binary alpha at 0.5
-                 and a 1 px outline (--outline selective|dark|none). --downscale box
-                 --contrast 1 --saturation 1 --outline none is the plain v1 finish.
-                 --indexed-sheet adds an indexed PNG sheet.
-  --canvas WxH   (hd and pixel) every frame on a fixed cell, the anchor at one point
-                 (--canvas-anchor X,Y, or centred over the feet); a clip too big for the
-                 cell is finished smaller so it fits (warned).
-  --colour-lock  (hd and pixel) MASTER.png or rest: keeps every design colour on the
-                 master's colours in OKLab (comfyui_forge_colour_lock.py): region hue shifts are undone,
-                 near colours are pulled softly toward their master colour (lightness kept,
-                 no posterising) and still pixels are smoothed over time.
-  palette build  One OKLab k-means++ palette across every action of a character or cast,
-                 with reserved fixed colours; deterministic for a --seed.
-  lineup         A cast line-up at x1 and x3 that checks the size rules (body height from
-                 the rest pose; spirits by opaque area) and writes a JSON report beside it.
-
-Input frames are registered straight-alpha RGBA frames (register_clip apply: its frames/
-folder or its output folder). Finished frames keep the source file names, so a gait_loop
-or retime selection made on the registered frames still applies to them. hd and pixel
-write a new --output-dir (frames/, frames-<k>x/, review-contact.png, finish.json and, in
-pixel mode, palette.json); palette build and lineup write new files. Nothing is ever
-replaced, and a failed run publishes nothing. Success prints one ASCII JSON line; errors
-print "error: ..." and exit 1 (a lineup whose rules fail still writes its report, then
-exits 1); usage errors exit 2. Library use: finish_clip(), build_cast_palette(), lineup().
-"""
+"""Finish registered clips into game-ready frames: HD (the default) or pixel art."""
 from __future__ import annotations
 
 import argparse
@@ -66,7 +26,7 @@ import comfyui_forge_palette as fp  # noqa: E402
 import comfyui_forge_colour_lock as colour_lock_module  # noqa: E402  (sibling: the colour lock)
 
 TOOL_NAME = "finish_frames"
-TOOL_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION  # QA envelopes record the package version (D29)
+TOOL_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION
 FINISH_SCHEMA = "video2dsprite.finish.v1"
 LINEUP_SCHEMA = "video2dsprite.lineup.v1"
 FINISH_FILE = "finish.json"
@@ -78,14 +38,14 @@ MODES = ("hd", "pixel")
 ANCHORS = ("feet", "center")
 LOOP_POLICIES = ("cycle", "oneshot")
 
-CONTOUR = 127               # body = alpha > 127, the 50% contour (pixelate.py: alpha > 0.5)
-REST_MIN_RUN = 6            # source px a row needs to count for the top and feet lines (pixelate.py _sil)
+CONTOUR = 127               # Geometry uses the 50% alpha contour.
+REST_MIN_RUN = 6            # Minimum occupied source pixels per row for top and feet measurements.
 OUTPUT_MIN_RUN = 2          # the same rule on finished frames (line-ups, measured rest height)
 STANCE_BAND = 0.02          # ground-contact band: 2% of the rest height (12 rows on ~600 px bodies)
-HYGIENE_FLOOR = 4           # alpha <= 4 is invisible resampling halo (D18); also the canvas crop threshold
-SCALE_REF_CLAMP = 0.03      # the scale-ref area correction is clamped to +-3% (pixelate.py)
+HYGIENE_FLOOR = 4           # alpha <= 4 is invisible resampling halo; also the canvas crop threshold
+SCALE_REF_CLAMP = 0.03      # Clamp scale-reference area correction to +/-3%.
 SCALE_REF_WARN = 0.01       # a correction beyond 1% warns: is the rest frame really the base still?
-DEFAULT_COLORS = 255        # palette build: 255 colours + transparent index 255 (game-opus55: 47 fixed + 208 learned)
+DEFAULT_COLORS = 255        # Palette capacity excludes the reserved transparent index.
 PIXEL_COLORS = 32           # pixel finish without --palette: a 45-90 px sprite reads as pixel art with 16-32 colours
 PIXEL_ALPHA = 0.5           # binary alpha threshold of the pixel finish
 PIXEL_ORPHANS = 1           # lone-pixel cleanup passes of the plain (v1) pixel finish (forge_palette.cleanup_orphans)
@@ -99,8 +59,7 @@ HOLD_SHARE = 0.30           # crisp hysteresis: the previous frame's cluster sta
 HOLD_DELTA_E = 0.06         # ... and is within OKLab dE 0.06 of the previous choice
 LIFT_CONTRAST = 1.10        # pixel lift: OKLab lightness spread around the rest pose's mean lightness
 LIFT_SATURATION = 1.15      # pixel lift: OKLab chroma scale
-SHADE_GAP = 0.04            # bold pixel finish: no two learned palette colours closer than this OKLab dE (flat
-                            # colour clusters; k-means alone put 8 oranges 0.03 apart on the 2026-10-06 fox)
+SHADE_GAP = 0.04            # Minimum OKLab separation between learned palette colours.
 FEATURE_DELTA_L = 0.22      # a lone pixel this much lighter or darker than every 4-neighbour is a feature (kept)
 PIXEL_CLEAN_PASSES = 2      # lone-pixel passes of the bold finish
 OUTLINE_MAX_L = 0.34        # an outline colour is at most this light (OKLab L) ...
@@ -113,7 +72,7 @@ SET_HEIGHT_TOLERANCE = 1.0  # output px spread of the rest heights of one charac
 CONTACT_FRAMES = 12
 SHEET_MAX_WIDTH = 4096
 PALETTE_FRAMES_PER_SET = 12     # palette build: frames sampled per set (evenly spaced)
-PALETTE_SAMPLES_PER_SET = 22000  # palette build: opaque pixels sampled per set (pixelate.py budget)
+PALETTE_SAMPLES_PER_SET = 22000  # Maximum opaque samples used to build a set palette.
 DEFAULT_RULES = ""
 DEFAULT_AREA_ROLES = ()
 EXACT_TOLERANCE = 0.02
@@ -151,8 +110,6 @@ BOLD_METHOD = ("finish_frames pixel v2 (bold): the hd registration; alpha from t
 class FinishError(ValueError):
     """A user-facing refusal: one ``error: ...`` line, exit 1, nothing published."""
 
-
-# --------------------------------------------------------------------------- small helpers
 
 def _natural_key(path: Path) -> list:
     return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", path.name)]
@@ -237,11 +194,10 @@ def _pack(rgb: np.ndarray) -> np.ndarray:
     return (channels[..., 0] << 16) | (channels[..., 1] << 8) | channels[..., 2]
 
 
-# --------------------------------------------------------------------------- inputs
-
 def resolve_frames(frames_dir: str | os.PathLike, pattern: str = "*.png") -> tuple[Path, list[Path], Path | None]:
     """The frames folder (a register_clip output folder means its frames/), its frames in natural
-    order and the registration.json beside them, if any. Finished frames are refused."""
+    order and the registration.json beside them, if any. Finished frames are refused.
+    """
     folder = Path(frames_dir)
     if not folder.is_dir():
         raise FinishError(f"frames folder not found: {folder}")
@@ -260,8 +216,6 @@ def resolve_frames(frames_dir: str | os.PathLike, pattern: str = "*.png") -> tup
     return folder, files, registration
 
 
-# --------------------------------------------------------------------------- body, scale and grid
-
 @dataclass(frozen=True)
 class Body:
     """A body inside the 50% alpha contour: the rows with at least ``min_run`` px set the top and feet lines."""
@@ -279,7 +233,8 @@ class Body:
 
 def measure_body(alpha: np.ndarray, min_run: int = REST_MIN_RUN) -> Body | None:
     """pixelate.py ``_sil``: area, feet line (under the lowest row with >= min_run px, so specks do not
-    count), top, centroid and the stance midpoint of the ground-contact band above the feet line."""
+    count), top, centroid and the stance midpoint of the ground-contact band above the feet line.
+    """
     mask = np.asarray(alpha) > CONTOUR
     counts = mask.sum(axis=1)
     rows = np.flatnonzero(counts >= min_run)
@@ -327,7 +282,8 @@ def load_finish(value: Any) -> tuple[dict[str, Any], Path | None]:
 def plan_scale(body: Body, target_height: float | None, scale_ref: Any, *, area_norm: bool = True,
                character: str | None = None) -> ScalePlan:
     """target height / rest height, or (pixelate.py prep_vframes) the reference clip's scale times
-    sqrt(reference rest area / this rest area), clamped to +-3%; ``area_norm=False`` takes it as is."""
+    sqrt(reference rest area / this rest area), clamped to +-3%; ``area_norm=False`` takes it as is.
+    """
     if (target_height is None) == (scale_ref is None):
         raise FinishError("give a target height or a scale reference (exactly one of them)")
     if target_height is not None:
@@ -377,7 +333,8 @@ class Grid:
 
 def full_grid(source_size: Sequence[int], anchor_src: Sequence[float], scale: float, factor: float) -> Grid:
     """pixelate.py's canvas rule (ax = ceil((fx - x0) * sc) + 1, ...) over the whole source frame; the
-    finished canvas is cropped from it later, so every frame shares one grid phase."""
+    finished canvas is cropped from it later, so every frame shares one grid phase.
+    """
     fx, fy = anchor_src
     width, height = source_size
     ax, ay = _ceil(fx * scale) + 1, _ceil(fy * scale) + 1
@@ -390,7 +347,8 @@ def reduce_frame(pixels: np.ndarray, box: tuple[int, int, int, int] | None, anch
     """One source frame on ``grid``: forge_core.resample_rgba box (area) on premultiplied channels, the
     source anchor landing exactly on the grid anchor. The frame is first cut to ``box`` (its visible
     pixels) with the anchor shifted by the same whole pixels, which resample_rgba guarantees gives
-    byte-identical output for less work."""
+    byte-identical output for less work.
+    """
     if box is None:
         return np.zeros((grid.size[1], grid.size[0], 4), np.uint8)
     x0, y0, x1, y1 = box
@@ -398,8 +356,6 @@ def reduce_frame(pixels: np.ndarray, box: tuple[int, int, int, int] | None, anch
                                                anchor_src=(anchor_src[0] - x0, anchor_src[1] - y0),
                                                anchor_dst=grid.anchor, out_size=grid.size), np.uint8)
 
-
-# --------------------------------------------------------------------------- flicker and pictures
 
 def flicker(states: Sequence[np.ndarray], sources: Sequence[np.ndarray], *, transparent: int | None,
             loop: bool) -> dict[str, Any] | None:
@@ -491,8 +447,6 @@ def _contact_indices(count: int) -> list[int]:
     return sorted({comfyui_forge_core.round_half_up(i * (count - 1) / max(1, shown - 1)) for i in range(shown)})
 
 
-# --------------------------------------------------------------------------- finish
-
 def _resolve_palette(palette: Any) -> tuple[fp.Palette, Path | None]:
     try:
         if isinstance(palette, (str, os.PathLike)):
@@ -523,11 +477,10 @@ def _indexed_sheet(maps: Sequence[np.ndarray], slot: int) -> tuple[np.ndarray, i
     return sheet, columns, rows
 
 
-# --------------------------------------------------------------------------- bold pixel art
-
 def supersampled(grid: Grid, factor: int = SUPERSAMPLE) -> Grid:
     """``grid`` with factor x factor sub-pixels per output pixel, pinned to the same anchor: output pixel
-    (x, y) covers exactly the sub-pixels [x*f, (x+1)*f) x [y*f, (y+1)*f)."""
+    (x, y) covers exactly the sub-pixels [x*f, (x+1)*f) x [y*f, (y+1)*f).
+    """
     return Grid(grid.factor, grid.scale * factor, (grid.size[0] * factor, grid.size[1] * factor),
                 (grid.anchor[0] * factor, grid.anchor[1] * factor))
 
@@ -543,7 +496,8 @@ class Clusters:
 
 def crisp_clusters(sub: np.ndarray, factor: int = SUPERSAMPLE) -> Clusters:
     """Split the factor x factor sub-pixels of every output pixel into two OKLab clusters (alpha-weighted
-    Lloyd steps from the darkest and the lightest solid sub-pixel). Only the visible window is computed."""
+    Lloyd steps from the darkest and the lightest solid sub-pixel). Only the visible window is computed.
+    """
     height, width = sub.shape[0] // factor, sub.shape[1] // factor
     dark = np.zeros((height, width, 3), np.float32)
     light = np.zeros((height, width, 3), np.float32)
@@ -592,7 +546,8 @@ def crisp_clusters(sub: np.ndarray, factor: int = SUPERSAMPLE) -> Clusters:
 
 def crisp_choice(clusters: Clusters, previous: np.ndarray | None) -> np.ndarray:
     """The OKLab colour of every output pixel: the heavier cluster; a darker cluster (DETAIL_GAP) from
-    DETAIL_SHARE, so lines and eyes survive; and the previous frame's cluster while it holds HOLD_SHARE."""
+    DETAIL_SHARE, so lines and eyes survive; and the previous frame's cluster while it holds HOLD_SHARE.
+    """
     dark, light, share = clusters.dark, clusters.light, clusters.share
     gap = light[..., 0] - dark[..., 0]
     pick_dark = share >= np.where(gap > DETAIL_GAP, DETAIL_SHARE, 0.5)
@@ -608,7 +563,8 @@ def crisp_choice(clusters: Clusters, previous: np.ndarray | None) -> np.ndarray:
 
 def lift_frame(frame: np.ndarray, contrast: float, saturation: float, pivot: float) -> np.ndarray:
     """OKLab lift of a straight-alpha RGBA frame: lightness spread around ``pivot`` by ``contrast``, chroma
-    scaled by ``saturation`` (1, 1 is the identity); alpha and invisible pixels are untouched."""
+    scaled by ``saturation`` (1, 1 is the identity); alpha and invisible pixels are untouched.
+    """
     if contrast == 1.0 and saturation == 1.0:
         return frame
     out = frame.copy()
@@ -632,7 +588,8 @@ def space_palette(pal: fp.Palette, frames: Sequence[np.ndarray], gap: float = SH
     colours never move (a learned colour close to one merges into it) and the darkest and the lightest colour
     keep their place (the outline and the highlights); untouched colours keep their exact RGB. Learned colours
     stay darkest first after the reserved ones, as build_palette orders them. A palette whose transparent index
-    is a colour slot is returned unchanged."""
+    is a colour slot is returned unchanged.
+    """
     count = len(pal)
     slot = pal.transparent_index
     if not gap > 0 or count < 3 or (slot is not None and slot < count):
@@ -686,7 +643,8 @@ def space_palette(pal: fp.Palette, frames: Sequence[np.ndarray], gap: float = SH
 def clean_lone_pixels(idx: np.ndarray, pal: fp.Palette, passes: int = PIXEL_CLEAN_PASSES) -> tuple[np.ndarray, int]:
     """Lone pixels (no 4-neighbour of their own index) take the neighbours' majority index, as
     forge_palette.cleanup_orphans, except features: a pixel FEATURE_DELTA_L lighter or darker than every
-    4-neighbour (an eye, a highlight) stays. Transparent pixels never change and never spread."""
+    4-neighbour (an eye, a highlight) stays. Transparent pixels never change and never spread.
+    """
     slot = pal.transparent_index
     lightness = np.full(256, np.nan)
     lightness[:len(pal)] = pal.lab[:, 0]
@@ -713,7 +671,8 @@ def clean_lone_pixels(idx: np.ndarray, pal: fp.Palette, passes: int = PIXEL_CLEA
 def outline_shades(pal: fp.Palette) -> np.ndarray:
     """Per palette index, the index that outlines it: the palette's dark shade of the same hue (OKLab L at
     most min(L - OUTLINE_DROP, OUTLINE_MAX_L), nearest to 45% of its lightness and 80% of its chroma, hue
-    weighted 3x), else the darkest colour. The transparent index maps to itself."""
+    weighted 3x), else the darkest colour. The transparent index maps to itself.
+    """
     lab = pal.lab.astype(np.float64)
     darkest = int(np.argmin(lab[:, 0]))
     table = np.full(256, darkest, np.int64)
@@ -733,7 +692,8 @@ def add_outline(idx: np.ndarray, pal: fp.Palette, mode: str, shades: np.ndarray 
                 ) -> tuple[np.ndarray, int]:
     """A 1 px outline on the transparent pixels 4-adjacent to the sprite: ``selective`` paints each one in
     the dark shade (outline_shades) of the darkest of its 8 neighbours, ``dark`` in the palette's darkest
-    colour. Needs a transparent border of 1 px; returns the map and the number of outline pixels."""
+    colour. Needs a transparent border of 1 px; returns the map and the number of outline pixels.
+    """
     slot = pal.transparent_index
     if mode == "none":
         return idx, 0
@@ -806,7 +766,8 @@ def canvas_window(content: tuple[int, int, int, int], anchor: tuple[int, int], c
 
     ``content`` is the union box of everything drawn (outline included) on the grid and ``anchor`` the grid
     anchor. Without ``canvas_anchor`` the anchor goes to the cell's centre column and one px above its bottom
-    edge, then moves the least that keeps the content inside the cell."""
+    edge, then moves the least that keeps the content inside the cell.
+    """
     width, height = canvas
     left, right = anchor[0] - content[0], content[2] - anchor[0]
     top, bottom = anchor[1] - content[1], content[3] - anchor[1]
@@ -841,7 +802,8 @@ def cut_window(frame: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
 @dataclass
 class _Pass:
     """One pass over the source frames: per display size the box frames, the cleaned frames and, for the
-    crisp pixel downscale, the crisp frames (cleaned alpha, cluster colour)."""
+    crisp pixel downscale, the crisp frames (cleaned alpha, cluster colour).
+    """
 
     small: dict[float, list[np.ndarray]]
     cleaned: dict[float, list[np.ndarray]]
@@ -854,7 +816,8 @@ def _source_pass(files: Sequence[Path], rest_frame: int, rest: tuple[np.ndarray,
                  source_size: tuple[int, int], anchor_src: Sequence[float], grids: Sequence[Grid], crisp: bool,
                  seed_frame: int | None) -> _Pass:
     """Every display size is derived from the source frame, never from another size. ``seed_frame`` (cycles:
-    the last frame) seeds the crisp hysteresis of frame 0."""
+    the last frame) seeds the crisp hysteresis of frame 0.
+    """
     small: dict[float, list[np.ndarray]] = {grid.factor: [] for grid in grids}
     cleaned: dict[float, list[np.ndarray]] = {grid.factor: [] for grid in grids}
     crisp_frames: dict[float, list[np.ndarray]] | None = {grid.factor: [] for grid in grids} if crisp else None
@@ -904,7 +867,8 @@ def _source_pass(files: Sequence[Path], rest_frame: int, rest: tuple[np.ndarray,
 
 def _source_extents(files: Sequence[Path], anchor_src: Sequence[float]) -> tuple[float, float, float, float]:
     """(left, right, top, bottom) source px of the union of every frame's visible pixels (alpha above the hygiene
-    floor) around the anchor."""
+    floor) around the anchor.
+    """
     box = None
     for path in files:
         with Image.open(path) as image:
@@ -922,7 +886,8 @@ def fit_scale(extents: tuple[float, float, float, float], scale: float, canvas: 
               canvas_anchor: tuple[int, int] | None, fixed: int) -> float:
     """The largest scale (at most ``scale``) at which content of source ``extents`` (left, right, top,
     bottom around the anchor) plus ``fixed`` output px on every side fits the canvas (the anchor free, or
-    at ``canvas_anchor``)."""
+    at ``canvas_anchor``).
+    """
     left, right, top, bottom = extents
     width, height = canvas
     if canvas_anchor is None:
@@ -1416,12 +1381,11 @@ def finish_clip(frames_dir: str | os.PathLike, out_dir: str | os.PathLike, *, mo
     }
 
 
-# --------------------------------------------------------------------------- palette build
-
 def _sample_set(files: Sequence[Path], frames_per_set: int, samples_per_set: int,
                 rng: np.random.Generator) -> tuple[np.ndarray, int]:
     """Opaque colours (alpha >= 128) of up to ``frames_per_set`` evenly spaced frames, at most
-    ``samples_per_set`` in total, drawn without replacement by ``rng``."""
+    ``samples_per_set`` in total, drawn without replacement by ``rng``.
+    """
     if len(files) > frames_per_set:
         picks = np.unique(np.floor(np.linspace(0, len(files) - 1, frames_per_set) + 0.5).astype(np.int64))
         files = [files[int(index)] for index in picks]
@@ -1531,8 +1495,6 @@ def cmd_palette_build(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     return summary, 0
 
 
-# --------------------------------------------------------------------------- lineup
-
 def parse_rules(text: str) -> list[dict[str, Any]]:
     """``hero:1.0,mob:<=1.0,boss:~2.0`` -> rules; a bare value means equal (within the exact tolerance)."""
     rules, seen = [], set()
@@ -1613,7 +1575,8 @@ def _plain_clip(folder: Path) -> dict[str, Any]:
 
 def load_set(role: str | None, folder: Path) -> dict[str, Any]:
     """A cast member: one finished clip, a folder of finished clips (one character; an idle clip
-    represents it), or a plain frames folder whose frame 0 is the rest pose."""
+    represents it), or a plain frames folder whose frame 0 is the rest pose.
+    """
     if not folder.is_dir():
         raise FinishError(f"set folder not found: {folder}")
     if (folder / FINISH_FILE).is_file():
@@ -1640,7 +1603,8 @@ def load_set(role: str | None, folder: Path) -> dict[str, Any]:
 
 def render_lineup(sets: Sequence[Mapping[str, Any]], reference_height: float) -> np.ndarray:
     """Every set's rest frame on one ground line at x1 (with labels) and x3 (nearest review zoom),
-    with the ground line and the reference body height (dotted) drawn across each strip."""
+    with the ground line and the reference body height (dotted) drawn across each strip.
+    """
     font = ImageFont.load_default()
     probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
     gap, margin, line_h = 8, 8, 12
@@ -1787,8 +1751,6 @@ def lineup(set_specs: Sequence[str | tuple[str | None, str | os.PathLike]], out:
             "warnings": [item["id"] for item in checks if item["status"] == "warn"],
             "ratios": {row["name"]: round(row["ratio"], 4) for row in rows}}
 
-
-# --------------------------------------------------------------------------- CLI
 
 def _positive(text: str) -> float:
     value = float(text)
@@ -1984,8 +1946,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2; refused input, failed QA and failed lineup rules exit 1 with ``error: ...``;
-    anything unexpected prints ``error: internal error (...)`` (D26, D27; forge_core.run_cli)."""
     return comfyui_forge_core.run_cli(_run, argv)
 
 

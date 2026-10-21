@@ -1,4 +1,3 @@
-"""Fixed resolution choices and consistent capped source-time arithmetic."""
 from pathlib import Path
 import copy
 import sys

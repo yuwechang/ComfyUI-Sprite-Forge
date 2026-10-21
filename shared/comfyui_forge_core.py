@@ -1,42 +1,8 @@
-"""Shared core for the Agent Sprite Forge skills (API version 1.1).
+"""Shared image, path, publication, geometry and timing utilities (API 1.1).
 
-Canonical home of the helpers every skill needs: no-replace publication, image
-I/O, connected components, alpha hygiene, anchors and grids, premultiplied
-resampling, and timing/seam metrics.
-
-API 1.1 (Phase 3 integration, D30) adds, without changing any 1.0 name or
-behaviour:
-
-* CLI and time: ``run_cli`` (D26/D27 error convention), ``utc_timestamp``,
-  ``FORGE_PACKAGE_VERSION`` (D29).
-* Paths and JSON: ``manifest_path`` and ``file_ref`` (one relPath rule for
-  every manifest writer), ``parse_json`` and ``read_json`` (UTF-8 with an
-  optional BOM, D28; opt-in strict mode).
-* Rounding and screens: ``round_half_up``, ``parse_aspect``,
-  ``aspect_viewport`` and ``cover_window``.
-* Masks: ``dilate_square``, ``distance_to`` (capped Chebyshev) and
-  ``merge_rects``.
-* Sheets and seams: ``ownership_slice`` (D14) and ``edge_seam_report`` (D9).
-
-This file is vendored byte-for-byte into each skill's ``scripts/`` directory as
-listed in ``shared/VENDORED.json``. Edit only ``shared/comfyui_forge_core.py``, then run
-``python tools/comfyui_forge_vendor_sync.py --write`` and ``--check``. Inside a skill, import
-the local copy (``sys.path.insert(0, str(Path(__file__).parent))``), never a
-sibling skill's copy.
-
-Conventions used throughout:
-
-* Pixel coordinates are continuous: pixel column ``i`` spans ``[i, i + 1)``.
-  Boxes are ``(x0, y0, x1, y1)`` with exclusive ``x1``/``y1``.
-* A pixel belongs to the subject when ``alpha > threshold``; threshold 0 is
-  the legacy ``alpha > 0`` rule.
-* Rounding is half-up (``floor(x + 0.5)``), never banker's rounding.
-* Images are 8-bit straight-alpha RGBA; published PNGs have RGB zeroed where
-  alpha is 0.
-
-Requires numpy and Pillow. scipy is optional: when it is missing, or when
-``FORGE_CORE_NO_SCIPY=1``, component labelling uses a vectorised numpy
-run-length union-find that returns identical labels.
+Images use straight-alpha RGBA; resizing works in premultiplied space.
+Canonical copies and skill destinations are listed in shared/VENDORED.json.
+After editing shared modules, run tools/comfyui_forge_vendor_sync.py --write.
 """
 
 from __future__ import annotations
@@ -47,7 +13,6 @@ import decimal
 import errno
 import functools
 import hashlib
-import importlib
 import io
 import json
 import math
@@ -68,24 +33,17 @@ from PIL import Image
 
 
 FORGE_CORE_API_VERSION = "1.1"
-FORGE_PACKAGE_VERSION = "0.4.0"  # the integrated release; QA envelopes record it as tool.version (D29)
+FORGE_PACKAGE_VERSION = "0.4.0"
 ALPHA_GEOMETRY_THRESHOLD = 16
 BODY_ALPHA_THRESHOLD = 32
 
 HYGIENE_MODES = ("none", "floor", "detached", "both")
 ANCHOR_MODES = ("feet", "stance", "bbox", "centroid", "center")
 RESAMPLERS = ("box", "lanczos", "nearest")
-ASPECT_POLICIES = ("expand", "fixed-height", "fixed-width")
-HAZE_POLICIES = ("keep", "drop")
-EDGE_SEAM_VERDICTS = ("continuous", "seam", "duplicate_edge", "flat", "too_small")
-EDGE_SEAM_DEFECTS = ("seam", "duplicate_edge")  # the verdicts a seam gate fails; flat and too_small are not seams
-EDGE_SEAM_NOMINAL_RATIO = 1.25  # verdict gate when the caller sets none (B11's NOMINAL_SEAM_RATIO)
 CLI_EXPECTED_ERRORS: tuple[type[BaseException], ...] = (OSError, ValueError, Image.DecompressionBombError)
 
 _CHUNK = 1 << 20
 
-
-# --------------------------------------------------------------------------- console and dependencies
 
 _ASCII_MAP = str.maketrans({
     "\u2192": "->", "\u2190": "<-", "\u2194": "<->", "\u21d2": "=>",
@@ -94,13 +52,6 @@ _ASCII_MAP = str.maketrans({
     "\u2264": "<=", "\u2265": ">=", "\u2260": "!=", "\u2248": "~", "\u00b1": "+/-",
     "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u00a0": " ",
 })
-
-_PIP_NAMES = {
-    "PIL": "Pillow",
-    "yaml": "PyYAML",
-    "resvg_py": "resvg-py",
-    "pytiled_parser": "pytiled-parser",
-}
 
 
 def utf8_stdio() -> None:
@@ -122,28 +73,9 @@ def utf8_stdio() -> None:
 
 def ascii_text(text: str) -> str:
     """Return console-safe ASCII: arrows, dashes, x, middle dot and common typography
-    are spelled out (``->``, ``-``, ``x``, ``.``); anything else is backslash-escaped."""
+    are spelled out (``->``, ``-``, ``x``, ``.``); anything else is backslash-escaped.
+    """
     return str(text).translate(_ASCII_MAP).encode("ascii", "backslashreplace").decode("ascii")
-
-
-def require_modules(names: Sequence[str]) -> None:
-    """Exit with status 1 and the exact pip command when any module cannot be imported."""
-    missing = []
-    for name in names:
-        try:
-            importlib.import_module(name)
-        except ImportError:
-            missing.append(name)
-    if not missing:
-        return
-    packages = dict.fromkeys(_PIP_NAMES.get(name.split(".")[0], name.split(".")[0]) for name in missing)
-    message = (
-        f"error: missing Python module(s): {', '.join(missing)}\n"
-        f"install with: python -m pip install {' '.join(packages)}\n"
-        f"(run it with the interpreter that runs this tool: {sys.executable})"
-    )
-    print(ascii_text(message), file=sys.stderr)
-    raise SystemExit(1)
 
 
 def _debugging() -> bool:
@@ -152,22 +84,22 @@ def _debugging() -> bool:
 
 def run_cli(main: Callable[..., Any], argv: Sequence[str] | None = None, *,
             expected: tuple[type[BaseException], ...] = CLI_EXPECTED_ERRORS) -> int:
-    """Run a CLI ``main`` with the forge error convention and return its exit status (D26, D27).
+    """Run a CLI ``main`` with the forge error convention and return its exit status.
 
     utf8_stdio() runs first. ``main()`` is called, or ``main(argv)`` when
     ``argv`` is given; its return value is the exit status (None means 0).
     SystemExit passes through untouched, so argparse usage errors keep their
-    exit 2 with ``usage: ... error: ...`` (D26) and ``--help`` exits 0. An
+    exit 2 with ``usage: ... error: ...`` and ``--help`` exits 0. An
     ``expected`` error (default CLI_EXPECTED_ERRORS: OSError, ValueError, which
     includes JSONDecodeError and UnicodeError, and Pillow's
     DecompressionBombError) prints ``error: <message>`` and returns 1. Any
     other exception prints ``error: internal error (<Type>: <message>)`` and
-    returns 1 (D27), and so does any other BaseException, such as the
+    returns 1, and so does any other BaseException, such as the
     pyo3_runtime.PanicException a Rust extension raises when it panics; Ctrl+C
     prints ``error: interrupted`` and returns 130. Messages go to stderr as
     ASCII, and tracebacks never reach the user unless ``FORGE_DEBUG=1``, which
     re-raises for developers. A CLI whose published report has status ``fail``
-    returns 1 from ``main`` itself (D26).
+    returns 1 from ``main`` itself.
 
     Use: ``if __name__ == "__main__": raise SystemExit(forge_core.run_cli(main))``.
     """
@@ -182,7 +114,7 @@ def run_cli(main: Callable[..., Any], argv: Sequence[str] | None = None, *,
             raise
         print("error: interrupted", file=sys.stderr)
         return 130
-    except BaseException as error:  # noqa: BLE001  the catch-all of D27: a bug still reads as one clean line
+    except BaseException as error:  # noqa: BLE001
         if _debugging():
             raise
         if isinstance(error, expected):
@@ -207,8 +139,6 @@ def utc_timestamp(moment: datetime | None = None) -> str:
             f"{moment.second:02d}.{moment.microsecond // 1000:03d}Z")
 
 
-# --------------------------------------------------------------------------- hashing, paths and JSON
-
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -222,7 +152,7 @@ def sha256_file(path: str | os.PathLike) -> str:
 
 
 def portable_path(path: str | os.PathLike, base: str | os.PathLike) -> str:
-    """Return ``path`` as a POSIX path relative to the directory ``base`` (MAP-24).
+    """Return ``path`` as a POSIX path relative to the directory ``base``.
 
     Pass the directory that holds the manifest, not the manifest file. Inside
     staged_output() the stage and the final directory share a parent, so either
@@ -242,17 +172,10 @@ _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 def manifest_path(path: str | os.PathLike, base: str | os.PathLike) -> str:
-    """``path`` as a common relPath for a manifest in the directory ``base`` (MAP-24, D30).
+    """Return a manifest-relative POSIX path, or the filename across drives.
 
-    portable_path() when its answer is a relPath; otherwise (another drive or
-    UNC share, where portable_path returns an absolute path) only the file
-    name, bound to the content by the sha256 the caller records beside it.
-    Manifests never store absolute paths. One rule replaces the writers'
-    regexes (``^[A-Za-z]:``, ``^[A-Za-z][A-Za-z0-9+.-]*:``, PureWindowsPath
-    drives, map_bundle's relPath pattern): the result always matches
-    common.schema.json's relPath pattern. A name that is empty, ``.`` or
-    ``..`` is taken from the resolved path; a name that is still not a relPath
-    (a POSIX name such as ``a:b`` or ``a\\b``) raises ValueError.
+    The caller binds the filename to its content with a SHA-256 digest.
+    Results must match common.schema.json's relPath format; invalid names raise ValueError.
     """
     relative = portable_path(path, base)
     if _REL_PATH.match(relative):
@@ -312,7 +235,7 @@ def _finite_float(text: str) -> float:
 
 
 def parse_json(data: bytes | bytearray | memoryview | str, *, strict: bool = False) -> Any:
-    """Parse a JSON document; bytes are UTF-8 with or without a BOM (``utf-8-sig``, D28).
+    """Parse a JSON document; bytes are UTF-8 with or without a BOM (``utf-8-sig``).
 
     A str may also start with a BOM (U+FEFF). ``strict`` additionally refuses
     what JSON forbids but Python's json module accepts: duplicate object keys,
@@ -334,7 +257,7 @@ def parse_json(data: bytes | bytearray | memoryview | str, *, strict: bool = Fal
 
 
 def read_json(path: str | os.PathLike, *, strict: bool = False) -> Any:
-    """Read a JSON file as UTF-8 with an optional BOM (D28: PowerShell 5.1 writes one); see parse_json.
+    """Read a JSON file as UTF-8 with an optional BOM; see parse_json.
 
     OSError (a missing or unreadable file) propagates unchanged; decoding and
     syntax problems raise ValueError without the file name.
@@ -378,8 +301,6 @@ def write_json(path: str | os.PathLike, data: Any, *, no_clobber: bool = True) -
     finally:
         temporary.unlink(missing_ok=True)
 
-
-# --------------------------------------------------------------------------- publishing
 
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1  # linux/fs.h
@@ -558,8 +479,6 @@ def staged_output(final: str | os.PathLike, prefix: str = "") -> Iterator[Path]:
             shutil.rmtree(stage, ignore_errors=True)
 
 
-# --------------------------------------------------------------------------- image I/O
-
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _SIXTEEN_BIT_GREY = ("I;16", "I;16B", "I;16L", "I;16N")
 _MODE_BITS = {"1": 1, "I;16": 16, "I;16B": 16, "I;16L": 16, "I;16N": 16, "I": 32, "F": 32}
@@ -598,7 +517,7 @@ def _to_rgba8(image: Image.Image, bit_depth: int) -> tuple[Image.Image, str]:
 
 
 def load_rgba(path: str | os.PathLike, *, allow_animated: bool = False) -> tuple[Image.Image, dict[str, Any]]:
-    """Load a still image as 8-bit straight-alpha RGBA, with provenance (S16, S23, MAP-19).
+    """Load a still image as 8-bit straight-alpha RGBA, with provenance.
 
     Accepts RGB(A), palette PNGs with tRNS (including 1/2/4-bit), P/PA, L/LA,
     1-bit, 16-bit grey (high byte, ``>> 8``), 16-bit RGB(A) (high byte, taken
@@ -653,8 +572,6 @@ def save_png(img: Image.Image | np.ndarray, path: str | os.PathLike, *, zero_tra
     Path(path).write_bytes(buffer.getvalue())
 
 
-# --------------------------------------------------------------------------- masks and components
-
 def _scipy_ndimage() -> Any:
     """scipy.ndimage, or None when scipy is missing or FORGE_CORE_NO_SCIPY forces the numpy fallback."""
     if os.environ.get("FORGE_CORE_NO_SCIPY", "") not in ("", "0"):
@@ -698,7 +615,7 @@ def _mask_bbox(mask: np.ndarray) -> tuple[int, int, int, int] | None:
 
 
 def subject_mask(alpha: Any, threshold: int = ALPHA_GEOMETRY_THRESHOLD) -> np.ndarray:
-    """Pixels that count for geometry: ``alpha > threshold`` (S01). Boolean input is returned as is."""
+    """Pixels that count for geometry: ``alpha > threshold``. Boolean input is returned as is."""
     plane = _alpha_plane(alpha)
     return plane.copy() if plane.dtype == bool else plane > threshold
 
@@ -774,8 +691,7 @@ def _label_runs(mask: np.ndarray, connectivity: int) -> tuple[np.ndarray, int]:
 def label_components(mask: Any, connectivity: int = 8) -> tuple[np.ndarray, int]:
     """Label connected True pixels: ``(labels int32, count)`` with labels 1..count in raster order.
 
-    8-connectivity is the default so 1-px diagonal strokes stay whole (S04,
-    MAP-06). Uses scipy.ndimage when available; otherwise, or with
+    8-connectivity is the default so 1-px diagonal strokes stay whole. Uses scipy.ndimage when available; otherwise, or with
     ``FORGE_CORE_NO_SCIPY=1``, an equivalent numpy run-length union-find.
     """
     if connectivity not in (4, 8):
@@ -844,7 +760,7 @@ def _mask2d(mask: Any, name: str) -> np.ndarray:
 
 
 def dilate_square(mask: Any, radius: int) -> np.ndarray:
-    """Chebyshev (square) dilation of a mask by ``radius`` px, from a summed-area table (D30).
+    """Chebyshev (square) dilation of a mask by ``radius`` px, from a summed-area table.
 
     A pixel is True when a True pixel lies within ``radius`` px in x and in y.
     Windows are clipped at the canvas, so the exterior never counts: on a mask
@@ -863,7 +779,7 @@ def dilate_square(mask: Any, radius: int) -> np.ndarray:
     return window > 0
 
 
-_dilate_square = dilate_square  # the 1.0 private name, used by alpha_hygiene
+_dilate_square = dilate_square  # Compatibility alias used by alpha_hygiene.
 
 
 def _grow8(mask: np.ndarray) -> np.ndarray:
@@ -878,7 +794,7 @@ def _grow8(mask: np.ndarray) -> np.ndarray:
 
 
 def distance_to(mask: Any, cap: int) -> np.ndarray:
-    """Chebyshev (8-neighbour) distance from every pixel to the nearest True pixel of ``mask``, capped (D30).
+    """Chebyshev (8-neighbour) distance from every pixel to the nearest True pixel of ``mask``, capped.
 
     Pixels farther than ``cap``, and every pixel of an empty mask, get
     ``cap + 1``; the canvas exterior is not part of the mask. The dtype is
@@ -906,40 +822,6 @@ def distance_to(mask: Any, cap: int) -> np.ndarray:
     return distance
 
 
-def merge_rects(mask: Any) -> list[tuple[int, int, int, int]]:
-    """Cover the True cells of a 2-D grid with disjoint rectangles ``(x, y, w, h)``; their union is exact (D30).
-
-    The greedy cover of B13's map_bundle.merge_rects, rectangle for rectangle:
-    rows are scanned top to bottom, and each maximal run of uncovered True
-    cells in a row starts a rectangle that grows downward while every cell
-    under the run stays True. Rectangles are listed by their top row, then
-    left to right. Vectorised per row: a run grows by the shortest downward
-    run of True cells beneath it (cells below a run can never be covered yet,
-    because an earlier rectangle reaching them would also cover the run).
-    """
-    blocked = _mask2d(mask, "merge_rects")
-    rows, cols = blocked.shape
-    if not blocked.any():
-        return []
-    index = np.arange(rows, dtype=np.int32)[:, None]
-    first_false = np.minimum.accumulate(np.where(blocked, np.int32(rows), index)[::-1], axis=0)[::-1]
-    down = np.append(first_false - index, np.zeros((rows, 1), np.int32), axis=1)  # True cells from (y, x) down
-    covered_until = np.zeros(cols, np.int64)  # column x is covered on rows below covered_until[x]
-    padded = np.zeros(cols + 2, np.int8)
-    rects: list[tuple[int, int, int, int]] = []
-    for y in range(rows):
-        free = blocked[y] & (covered_until <= y)
-        if not free.any():
-            continue
-        padded[1:-1] = free
-        edges = np.flatnonzero(np.diff(padded))
-        starts, ends = edges[0::2], edges[1::2]
-        heights = np.minimum.reduceat(down[y], edges)[0::2]  # the sentinel column keeps every index valid
-        covered_until[free] = np.repeat(y + heights, ends - starts)
-        rects.extend(zip(starts.tolist(), [y] * len(starts), (ends - starts).tolist(), heights.tolist()))
-    return rects
-
-
 def _rgba_array(source: Any) -> np.ndarray:
     """8-bit straight-alpha RGBA array view of an Image or array; premultiplied modes are refused."""
     if isinstance(source, Image.Image):
@@ -956,7 +838,7 @@ def _rgba_array(source: Any) -> np.ndarray:
 
 def alpha_hygiene(rgba: Any, mode: str = "both", floor: int = 4, solid_min: int = 32,
                   attach_radius: int = 2) -> tuple[Image.Image, dict[str, Any]]:
-    """Remove generator alpha noise without touching visible art (DOC-04, report v2 P1-4).
+    """Remove generator alpha noise without touching visible art.
 
     ``floor`` zeroes pixels with ``0 < alpha <= floor``. ``detached`` removes
     8-connected ``alpha > 0`` islands with no pixel within ``attach_radius``
@@ -997,15 +879,13 @@ def alpha_hygiene(rgba: Any, mode: str = "both", floor: int = 4, solid_min: int 
     return Image.fromarray(pixels), report
 
 
-# --------------------------------------------------------------------------- rounding and screen aspect
-
 _HALF = Fraction(1, 2)
 _DECIMAL_HALF = decimal.Decimal("0.5")
 _ASPECT = re.compile(r"\s*([0-9]*\.?[0-9]+)\s*(?:[:/]\s*([0-9]*\.?[0-9]+))?\s*")
 
 
 def round_half_up(value: Any) -> int:
-    """Nearest integer with halves rounded up, ``floor(value + 1/2)``: 2.5 -> 3, -2.5 -> -2 (MAP-21, D30).
+    """Nearest integer with halves rounded up, ``floor(value + 1/2)``: 2.5 -> 3, -2.5 -> -2.
 
     Never banker's rounding. Integers come back unchanged; Fractions (any
     exact rational) and Decimals round exactly. Floats, numpy floats
@@ -1023,68 +903,11 @@ def round_half_up(value: Any) -> int:
     return int(math.floor(value + 0.5))
 
 
-_round_half_up = round_half_up  # the 1.0 private name
-
-
-def parse_aspect(text: Any) -> tuple[float, float]:
-    """A screen aspect as ``(width share, height share)``: ``16:9``, ``19.5:9``, ``16/9`` or a ratio such as ``1.7778``.
-
-    Shares are kept, not divided, so ``19.5:9`` on 540 rows is exactly 1170
-    columns. Anything else, or a share that is zero or not finite, raises
-    ValueError.
-    """
-    match = _ASPECT.fullmatch(str(text))
-    if not match:
-        raise ValueError(f"aspect {text!r} must look like 16:9 or 1.7778.")
-    width, height = float(match.group(1)), float(match.group(2) or 1)
-    if not (math.isfinite(width) and math.isfinite(height)) or width <= 0 or height <= 0:
-        raise ValueError(f"aspect {text!r} must be a positive ratio.")
-    return width, height
-
-
-def aspect_viewport(viewport: Sequence[float], aspect: Sequence[float], policy: str) -> list[float]:
-    """``[width, height]`` a screen of ``aspect`` shows for a ``viewport`` designed at another aspect.
-
-    ``expand`` keeps the whole designed viewport and grows the other side,
-    ``fixed-height`` keeps the height and ``fixed-width`` the width (see
-    ASPECT_POLICIES). ``aspect`` is a parse_aspect() pair.
-    """
-    if policy not in ASPECT_POLICIES:
-        raise ValueError(f"Unknown aspect policy {policy!r}; use one of {', '.join(ASPECT_POLICIES)}.")
-    width, height = viewport
-    share_w, share_h = aspect
-    if policy == "fixed-height" or (policy == "expand" and share_w * height >= width * share_h):
-        return [height * share_w / share_h, height]
-    return [width, width * share_h / share_w]
-
-
-def cover_window(size: Sequence[float], aspect: Sequence[float], zoom: float = 1.0,
-                 focus: Sequence[float] = (0.5, 0.5)) -> tuple[float, float, float, float]:
-    """The part ``(x0, y0, x1, y1)`` of a ``size`` plate that a cover-cropping runtime shows on an ``aspect`` screen.
-
-    The largest window of the screen's aspect that fits the plate, divided by
-    a plate-pan ``zoom`` (> 0), placed at ``focus`` (0..1 in x and y; 0.5, 0.5
-    centres it, as ImageOps.fit does) (game-opus55 drawCoverR).
-    """
-    zoom = float(zoom)
-    if not math.isfinite(zoom) or zoom <= 0:
-        raise ValueError(f"zoom must be a positive finite number; got {zoom!r}.")
-    width, height = size
-    share_w, share_h = aspect
-    if share_w * height >= width * share_h:
-        window_w, window_h = float(width), width * share_h / share_w
-    else:
-        window_w, window_h = height * share_w / share_h, float(height)
-    window_w, window_h = window_w / zoom, window_h / zoom
-    left, top = (width - window_w) * focus[0], (height - window_h) * focus[1]
-    return left, top, left + window_w, top + window_h
-
-
-# --------------------------------------------------------------------------- anchors and grids
+_round_half_up = round_half_up  # Compatibility alias.
 
 
 def ground_row(mask: Any, *, min_run: int = 1) -> int:
-    """Ground line: bottom edge of the lowest stable row, i.e. that row's index + 1 (S14).
+    """Ground line: bottom edge of the lowest stable row, i.e. that row's index + 1.
 
     A row is stable when it holds at least ``min_run`` mask pixels; raise
     ``min_run`` to ignore thin tips or specks below the feet.
@@ -1107,7 +930,7 @@ def anchor_from_mask(mask: Any, mode: str = "feet", band_rows: int = 12,
     The support band is the ``band_rows`` rows above ground_row(); scale it
     with the subject height. ``subject_bbox`` restricts every mode to that box
     (the selected component's), so a weapon outside it cannot move the
-    anchor (S15).
+    anchor.
     """
     if mode not in ANCHOR_MODES:
         raise ValueError(f"Unknown anchor mode {mode!r}; use one of {', '.join(ANCHOR_MODES)}.")
@@ -1138,218 +961,14 @@ def anchor_from_mask(mask: Any, mode: str = "feet", band_rows: int = 12,
     return float(np.median(np.nonzero(band)[1])) + 0.5, float(ground)
 
 
-def rounded_grid_boxes(width: int, height: int, rows: int, cols: int) -> list[tuple[int, int, int, int]]:
-    """Row-major cell boxes whose edges are ``round_half_up(i * size / n)`` (MAP-04, DOC-03).
-
-    Cells differ by at most 1 px, cover every pixel exactly once and need no
-    divisibility: 1254 px in 4 columns gives widths 314, 313, 314, 313.
-    """
-    if rows < 1 or cols < 1:
-        raise ValueError("Grid rows and columns must be positive.")
-    if width < cols or height < rows:
-        raise ValueError(f"A {width}x{height} image cannot hold {rows} rows x {cols} columns of cells.")
-    xs = [(2 * index * width + cols) // (2 * cols) for index in range(cols + 1)]
-    ys = [(2 * index * height + rows) // (2 * rows) for index in range(rows + 1)]
-    return [(xs[col], ys[row], xs[col + 1], ys[row + 1]) for row in range(rows) for col in range(cols)]
-
-
-def pad_to_grid(img: Image.Image, rows: int, cols: int,
-                fill: Any = (0, 0, 0, 0)) -> tuple[Image.Image, tuple[int, int]]:
-    """Pad losslessly so the size divides into ``rows`` x ``cols`` cells (DOC-03).
-
-    Padding is split evenly, the odd pixel going right/bottom. Returns the new
-    image and the ``(left, top)`` offset of the original inside it. Pass the
-    key colour as ``fill`` for chroma-key sheets.
-    """
-    if rows < 1 or cols < 1:
-        raise ValueError("Grid rows and columns must be positive.")
-    width, height = img.size
-    extra_x, extra_y = -width % cols, -height % rows
-    offset = (extra_x // 2, extra_y // 2)
-    if not extra_x and not extra_y:
-        return img.copy(), offset
-    canvas = Image.new(img.mode, (width + extra_x, height + extra_y), fill)
-    canvas.paste(img, offset)
-    return canvas, offset
-
-
 def integer_scale(scale: float, tol: float = 1e-6) -> int:
-    """Return ``scale`` as a positive integer; raise ValueError for fractional scales (S06)."""
+    """Return ``scale`` as a positive integer; raise ValueError for fractional scales."""
     value = float(scale)
     nearest = round(value) if math.isfinite(value) else 0
     if nearest < 1 or abs(value - nearest) > tol:
         raise ValueError(f"Nearest resampling needs an integer scale (1, 2, 3, ...); got {scale!r}.")
     return int(nearest)
 
-
-# --------------------------------------------------------------------------- sheets
-
-# The neighbour order of the report v2 prototype (sheet_checks.py): left, right, above, below, then the diagonals.
-_ATTACH_DIRECTIONS = ((0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1))
-
-
-def _slice_boxes(width: int, height: int, rows: Any, cols: Any, boxes: Any) -> list[tuple[int, int, int, int]]:
-    if boxes is None:
-        if rows is None or cols is None:
-            raise ValueError("ownership_slice needs rows and cols, or boxes=.")
-        return rounded_grid_boxes(width, height, operator.index(rows), operator.index(cols))
-    if rows is not None or cols is not None:
-        raise ValueError("Pass rows and cols, or boxes=, not both.")
-    cells = []
-    for box in boxes:
-        x0, y0, x1, y1 = (operator.index(value) for value in box)
-        if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height):
-            raise ValueError(f"Box {[x0, y0, x1, y1]} must lie inside the {width}x{height} image with x0 < x1 "
-                             "and y0 < y1.")
-        cells.append((x0, y0, x1, y1))
-    if not cells:
-        raise ValueError("ownership_slice needs at least one box.")
-    return cells
-
-
-def _attach_soft(owner: np.ndarray, soft: np.ndarray, radius: int) -> tuple[np.ndarray, int]:
-    """Give ``soft`` pixels the owner they reach within ``radius`` 8-steps through soft pixels.
-
-    Breadth-first and synchronous: each step reads the owners of the step
-    before, and the first neighbour in _ATTACH_DIRECTIONS order that is owned
-    wins. Only soft pixels within ``radius`` px of an owned pixel can be
-    reached, so only those are visited. Returns ``(owner, attached_px)``.
-    """
-    height, width = owner.shape
-    owner = owner.copy()
-    ys, xs = np.nonzero(soft & dilate_square(owner >= 0, radius))
-    attached = 0
-    for _ in range(radius):
-        if ys.size == 0:
-            break
-        found = np.full(ys.size, -1, owner.dtype)
-        for dy, dx in _ATTACH_DIRECTIONS:
-            open_ = found < 0
-            sy, sx = ys[open_] - dy, xs[open_] - dx
-            inside = (sy >= 0) & (sy < height) & (sx >= 0) & (sx < width)
-            values = np.full(sy.size, -1, owner.dtype)
-            values[inside] = owner[sy[inside], sx[inside]]
-            found[np.flatnonzero(open_)[values >= 0]] = values[values >= 0]
-        reached = found >= 0
-        owner[ys[reached], xs[reached]] = found[reached]
-        attached += int(reached.sum())
-        ys, xs = ys[~reached], xs[~reached]
-    return owner, attached
-
-
-def ownership_slice(rgba: Any, rows: int | None = None, cols: int | None = None, *,
-                    boxes: Sequence[Sequence[int]] | None = None, alpha_threshold: int, min_area: int, haze: str,
-                    attach_radius: int = 6, count: int | None = None) -> tuple[list[np.ndarray], dict[str, Any]]:
-    """Slice a sheet so no subject is cut: each frame keeps its cell origin plus one shared padding (D14).
-
-    Cells are ``rounded_grid_boxes(width, height, rows, cols)``, or explicit
-    ``boxes`` ``(x0, y0, x1, y1)`` (crop boxes may leave gaps or overlap).
-    8-connected components of ``alpha > alpha_threshold`` with at least
-    ``min_area`` px go whole to the cell holding most of their pixels (ties:
-    the lower cell index); a component outside every cell has no owner.
-    Fainter visible pixels join the owner they reach within ``attach_radius``
-    8-steps through visible unowned pixels (report v2 prototype order:
-    left, right, above, below, diagonals). ``haze`` decides what stays
-    unowned after that: ``keep`` gives it to the first cell containing it
-    (only pixels outside every cell are dropped), ``drop`` drops it. Every
-    frame is placed on one canvas at its cell origin minus one shared
-    ``padding``, so the frames keep the sheet's registration, and only the
-    owned pixels are copied (RGB elsewhere is zero). Only the first ``count``
-    cells (default all) are returned and padded for; the rest may be empty.
-
-    The two policies of D14: frame assembly (B02) keeps haze with
-    ``alpha_threshold=16, min_area=4``; spill QC (B03) drops it with
-    ``alpha_threshold=127, min_area=64``.
-
-    Returns ``(frames, report)``. The report holds ``mode``, ``method``,
-    ``haze``, ``threshold``, ``min_area``, ``attach_radius``,
-    ``connectivity``, ``cells``, ``cells_used``, ``canvas`` [w, h],
-    ``padding`` [left, top, right, bottom], ``registration``,
-    ``frame_origins_in_sheet``, ``attached_px``, ``cell_fallback_px``,
-    ``dropped_px``, ``dropped_max_alpha``, ``unused_cells_px``,
-    ``empty_cells`` (returned cells without pixels) and ``frames`` (per frame:
-    ``box``, ``sheet_origin``, ``owned_components``, ``owned_px`` and
-    ``pixels_from_outside_cell``).
-    """
-    pixels = _rgba_array(rgba)
-    height, width = pixels.shape[:2]
-    cells = _slice_boxes(width, height, rows, cols, boxes)
-    if haze not in HAZE_POLICIES:
-        raise ValueError(f"Unknown haze policy {haze!r}; use one of {', '.join(HAZE_POLICIES)}.")
-    threshold, min_area, attach_radius = (operator.index(value) for value in (alpha_threshold, min_area, attach_radius))
-    if not 0 <= threshold <= 254 or min_area < 0 or attach_radius < 0:
-        raise ValueError("ownership_slice needs 0 <= alpha_threshold <= 254, min_area >= 0 and attach_radius >= 0.")
-    used = len(cells) if count is None else operator.index(count)
-    if not 1 <= used <= len(cells):
-        raise ValueError(f"count must be between 1 and {len(cells)}; got {used}.")
-    alpha = pixels[..., 3]
-    labels, total = label_components(alpha > threshold, 8)
-    areas = np.bincount(labels.ravel(), minlength=total + 1)
-    counts = np.stack([np.bincount(labels[y0:y1, x0:x1].ravel(), minlength=total + 1) for x0, y0, x1, y1 in cells])
-    owner_of = counts.argmax(axis=0).astype(np.int32)
-    owner_of[(counts.max(axis=0) == 0) | (areas < min_area)] = -1
-    owner_of[0] = -1
-    visible = alpha > 0
-    owners = owner_of[labels]
-    owners, attached = _attach_soft(owners, visible & (owners < 0), attach_radius)
-    fallback = 0
-    if haze == "keep":
-        for index, (x0, y0, x1, y1) in enumerate(cells):
-            region = owners[y0:y1, x0:x1]
-            unassigned = visible[y0:y1, x0:x1] & (region < 0)
-            fallback += int(unassigned.sum())
-            region[unassigned] = index
-    dropped = visible & (owners < 0)
-
-    ys, xs = np.nonzero(owners >= 0)
-    assigned = owners[ys, xs]
-    order = np.argsort(assigned, kind="stable")
-    ys, xs, assigned = ys[order], xs[order], assigned[order]
-    splits = np.searchsorted(assigned, np.arange(len(cells) + 1))
-    cell_w = max(x1 - x0 for x0, _y0, x1, _y1 in cells[:used])
-    cell_h = max(y1 - y0 for _x0, y0, _x1, y1 in cells[:used])
-    extents = [(int(xs[lo:hi].min()) - x0, int(ys[lo:hi].min()) - y0,
-                int(xs[lo:hi].max()) + 1 - x0, int(ys[lo:hi].max()) + 1 - y0)
-               for (x0, y0, _x1, _y1), lo, hi in zip(cells[:used], splits[:used], splits[1:used + 1]) if lo < hi]
-    pad_l = max([0] + [-extent[0] for extent in extents])
-    pad_t = max([0] + [-extent[1] for extent in extents])
-    pad_r = max([0] + [extent[2] - cell_w for extent in extents])
-    pad_b = max([0] + [extent[3] - cell_h for extent in extents])
-    canvas = (cell_w + pad_l + pad_r, cell_h + pad_t + pad_b)
-    owned_components = np.bincount(owner_of[owner_of >= 0], minlength=len(cells))
-    frames, records, empty = [], [], []
-    for index, (x0, y0, x1, y1) in enumerate(cells[:used]):
-        lo, hi = splits[index], splits[index + 1]
-        fy, fx = ys[lo:hi], xs[lo:hi]
-        frame = np.zeros((canvas[1], canvas[0], 4), np.uint8)
-        frame[fy - y0 + pad_t, fx - x0 + pad_l] = pixels[fy, fx]
-        frames.append(frame)
-        if lo == hi:
-            empty.append(index)
-        records.append({"box": [x0, y0, x1, y1], "sheet_origin": [x0 - pad_l, y0 - pad_t],
-                        "owned_components": int(owned_components[index]), "owned_px": int(hi - lo),
-                        "pixels_from_outside_cell": int((~((fx >= x0) & (fx < x1) & (fy >= y0) & (fy < y1))).sum())})
-    report = {
-        "mode": "ownership",
-        "method": ("8-connected components of alpha > threshold with at least min_area px go whole to the cell "
-                   "holding most of their pixels; fainter visible pixels join the owner they reach within "
-                   "attach_radius steps; haze keep/drop decides the rest; one shared padding keeps registration"),
-        "haze": haze, "threshold": threshold, "min_area": min_area, "attach_radius": attach_radius,
-        "connectivity": 8, "cells": len(cells), "cells_used": used,
-        "canvas": [int(canvas[0]), int(canvas[1])],
-        "padding": [int(pad_l), int(pad_t), int(pad_r), int(pad_b)],
-        "registration": "frame pixel (u, v) = sheet pixel (u - padding[0] + cell x0, v - padding[1] + cell y0)",
-        "frame_origins_in_sheet": [record["sheet_origin"] for record in records],
-        "attached_px": attached, "cell_fallback_px": fallback, "dropped_px": int(dropped.sum()),
-        "dropped_max_alpha": int(alpha[dropped].max()) if dropped.any() else 0,
-        "unused_cells_px": int(((owners >= used) & visible).sum()),
-        "empty_cells": empty,
-        "frames": records,
-    }
-    return frames, report
-
-
-# --------------------------------------------------------------------------- resampling
 
 _FILTERS = {"box": (Image.Resampling.BOX, 0.5), "lanczos": (Image.Resampling.LANCZOS, 3.0)}
 
@@ -1361,7 +980,8 @@ def _filter_for(resampler: str, scale: float) -> tuple[Image.Resampling, float]:
 
 def _unpremultiply(planes: list[np.ndarray]) -> Image.Image:
     """Back to straight 8-bit RGBA. Colour is divided by the unclipped alpha, so filter
-    overshoot (alpha above 1 next to an edge) cannot brighten it."""
+    overshoot (alpha above 1 next to an edge) cannot brighten it.
+    """
     alpha = planes[3]
     alpha8 = np.floor(np.clip(alpha, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
     premultiplied = np.clip(np.stack(planes[:3], axis=-1), 0.0, None)
@@ -1405,7 +1025,7 @@ def _resample_nearest(pixels: np.ndarray, scale: float, anchor_src: tuple[float,
 def resample_rgba(img: Any, scale: float, resampler: str = "lanczos", *,
                   anchor_src: Sequence[float] | None = None, anchor_dst: Sequence[float] | None = None,
                   out_size: Sequence[int] | None = None) -> Image.Image:
-    """Resample straight-alpha RGBA on premultiplied float channels (S05, S06).
+    """Resample straight-alpha RGBA on premultiplied float channels.
 
     Every channel is premultiplied and resized as its own float image, so
     Pillow never premultiplies a second time; premultiplied input modes
@@ -1424,7 +1044,7 @@ def resample_rgba(img: Any, scale: float, resampler: str = "lanczos", *,
     ``anchor_dst``) gives byte-identical output, so a rest pose shared by two
     clips stays identical.
 
-    Caveat (D18): ``lanczos`` rings just outside an edge, and dividing that
+    Caveat: ``lanczos`` rings just outside an edge, and dividing that
     tiny premultiplied ringing by an alpha of 1-4 (out of 255) invents
     saturated colours there, often key-leaning ones such as (255, 222, 247).
     They are invisible (under 2% opacity) but fool colour-based QA: B06's
@@ -1489,8 +1109,6 @@ def resample_rgba(img: Any, scale: float, resampler: str = "lanczos", *,
     return _unpremultiply(resized)
 
 
-# --------------------------------------------------------------------------- timing and seams
-
 _SEAM_EPSILON = 1e-6
 
 
@@ -1546,18 +1164,8 @@ def _mean_difference(a: np.ndarray, b: np.ndarray, weights: np.ndarray | None) -
     return float((per_pixel * weights).sum() / weights.sum())
 
 
-def transition_mae(a: Any, b: Any, *, mask: Any = None) -> float:
-    """Mean absolute difference of premultiplied RGBA, in 0-255 units.
-
-    RGB hidden under alpha 0 does not count. ``mask`` (boolean, or 0-255
-    weights) restricts the measure to a region, such as a motion mask.
-    """
-    first, second = _premultiplied(a), _premultiplied(b)
-    return _mean_difference(first, second, _weights(mask, first.shape[:2]))
-
-
 def seam_report(frames: Iterable[Any], *, mask: Any = None) -> dict[str, Any]:
-    """Loop seam normalised by the clip's own motion (MAP-14, hd2d seam findings).
+    """Loop seam normalised by the clip's own motion.
 
     ``seam`` is transition_mae(last, first); the adjacent steps are the
     transitions between neighbours. ``seam_over_median`` and ``seam_over_p95``
@@ -1590,98 +1198,4 @@ def seam_report(frames: Iterable[Any], *, mask: Any = None) -> dict[str, Any]:
         "seam_over_median": seam / max(median, _SEAM_EPSILON),
         "seam_over_p95": seam / max(p95, _SEAM_EPSILON),
         "method": "premultiplied RGBA mean absolute difference (0-255); seam = last -> first",
-    }
-
-
-# B11's calibration (extract_platform_strip.py / extract_terrain_tiles.py, section 8 of its handoff).
-_EDGE_LOCAL_STEPS = 8      # interior steps per side that describe the art around a join
-_EDGE_WINDOW_ROWS = 4      # a partial seam must show along this many consecutive rows
-_EDGE_NEAR_STEPS = 3       # steps per side that define a join's immediate neighbourhood
-_EDGE_SEAM_FLOOR = 1.0     # joins below this step are continuous whatever the ratio
-_EDGE_DUPLICATE_RATIO = 0.25  # a join step below this share of the neighbourhood duplicates an edge
-_EDGE_DUPLICATE_FLOOR = 2.0   # flatter neighbourhoods cannot show a duplicated edge
-_EDGE_FLAT_STEP = 1e-6     # a join and neighbourhood this still are flat: nothing to compare
-
-
-def _window_max(values: np.ndarray, window: int) -> float:
-    """Largest mean over ``window`` consecutive rows of any column of ``values`` (rows x columns)."""
-    if values.size == 0:
-        return 0.0
-    window = min(window, values.shape[0])
-    sums = np.cumsum(np.pad(values, ((1, 0), (0, 0))), axis=0)
-    return float(((sums[window:] - sums[:-window]) / window).max())
-
-
-def edge_seam_report(left: Any, right: Any, *, left_start: int = 0, right_stop: int | None = None,
-                     gate: float | None = None) -> dict[str, Any]:
-    """Normalised seam of the join ``left[:, -1] | right[:, 0]`` of two images (MAP-14; D9).
-
-    The spatial twin of seam_report, ported exactly from B11's
-    ``_local_edge_seam_report``. ``seam`` is the premultiplied RGBA step
-    (0-255) across the join; ``adjacent_*`` describe the interior column steps
-    within 8 columns of it on both sides, never using columns of ``left``
-    before ``left_start`` or of ``right`` from ``right_stop`` on (outer cap
-    padding). ``seam_ratio`` is the larger of seam / adjacent_max and the
-    worst 4-row window of the join over the worst 4-row window of those
-    steps: about 1 or less looks like the art, well above 1 is a seam. Test a
-    vertical join (top/bottom) by passing the images transposed
-    (``np.swapaxes(image, 0, 1)``); a wrap is ``edge_seam_report(image, image)``.
-
-    ``verdict`` (EDGE_SEAM_VERDICTS, D9): ``too_small`` when neither side
-    has an interior step to compare with (each side one column wide; the
-    ratios are then 0); ``flat`` when the join and every interior step are at
-    most 1e-6 (a flat colour: nothing to judge, and nothing wrong);
-    ``duplicate_edge`` when the join is much flatter than its immediate
-    neighbourhood (near_median >= 2 and seam < 0.25 * near_median: the edge
-    column repeats, a stutter); ``seam`` when seam > 1 and seam_ratio exceeds
-    ``gate`` (default EDGE_SEAM_NOMINAL_RATIO, 1.25); else ``continuous``.
-    B11's three verdicts are unchanged wherever its metric applies; gates
-    should fail EDGE_SEAM_DEFECTS only. Images are 8-bit RGBA or RGB arrays
-    or Pillow images with the same height. The result is common seamReport
-    plus ``seam_ratio``, ``near_median``, ``verdict`` and ``method``; numbers
-    are rounded to 6 decimals.
-    """
-    left_pixels, right_pixels = _rgba_array(left), _rgba_array(right)
-    if left_pixels.shape[0] != right_pixels.shape[0] or left_pixels.shape[0] == 0:
-        raise ValueError(f"A join needs two images of the same non-zero height; got {left_pixels.shape[0]} and "
-                         f"{right_pixels.shape[0]} rows.")
-    if gate is not None and not (math.isfinite(gate) and gate >= 0):
-        raise ValueError(f"gate must be a finite number >= 0; got {gate!r}.")
-    left_part = left_pixels[:, operator.index(left_start):][:, -(_EDGE_LOCAL_STEPS + 1):]
-    right_part = right_pixels[:, :right_stop][:, :_EDGE_LOCAL_STEPS + 1]
-    if left_part.shape[1] == 0 or right_part.shape[1] == 0:
-        raise ValueError("left_start and right_stop leave no column on one side of the join.")
-    a = _premultiplied(left_part)  # only the columns near the join
-    b = _premultiplied(right_part)
-    join_rows = np.abs(a[:, -1] - b[:, 0]).mean(axis=1)
-    left_steps = np.abs(np.diff(a, axis=1)).mean(axis=2)
-    right_steps = np.abs(np.diff(b, axis=1)).mean(axis=2)
-    local = np.concatenate([left_steps, right_steps], axis=1)
-    means = local.mean(axis=0) if local.size else np.zeros(1)
-    near = np.concatenate([left_steps[:, -_EDGE_NEAR_STEPS:].mean(axis=0) if left_steps.size else np.zeros(0),
-                           right_steps[:, :_EDGE_NEAR_STEPS].mean(axis=0) if right_steps.size else np.zeros(0)])
-    seam = float(join_rows.mean())
-    median, p95, peak = float(np.median(means)), float(np.percentile(means, 95)), float(means.max())
-    near_median = float(np.median(near)) if near.size else 0.0
-    ratio = max(seam / max(peak, _SEAM_EPSILON),
-                _window_max(join_rows[:, None], _EDGE_WINDOW_ROWS)
-                / max(_window_max(local, _EDGE_WINDOW_ROWS), _SEAM_EPSILON))
-    over_median, over_p95 = seam / max(median, _SEAM_EPSILON), seam / max(p95, _SEAM_EPSILON)
-    if not local.size:
-        verdict, ratio, over_median, over_p95 = "too_small", 0.0, 0.0, 0.0
-    elif seam <= _EDGE_FLAT_STEP and peak <= _EDGE_FLAT_STEP:
-        verdict = "flat"
-    elif near_median >= _EDGE_DUPLICATE_FLOOR and seam < _EDGE_DUPLICATE_RATIO * near_median:
-        verdict = "duplicate_edge"
-    elif seam > _EDGE_SEAM_FLOOR and ratio > (gate if gate is not None else EDGE_SEAM_NOMINAL_RATIO):
-        verdict = "seam"
-    else:
-        verdict = "continuous"
-    return {
-        "seam": round(seam, 6), "adjacent_median": round(median, 6), "adjacent_p95": round(p95, 6),
-        "adjacent_max": round(peak, 6), "seam_over_median": round(over_median, 6),
-        "seam_over_p95": round(over_p95, 6), "seam_ratio": round(ratio, 6),
-        "near_median": round(near_median, 6), "verdict": verdict,
-        "method": (f"premultiplied RGBA column steps (0-255); join vs interior steps within {_EDGE_LOCAL_STEPS} "
-                   f"columns per side, whole edge and worst {_EDGE_WINDOW_ROWS}-row window"),
     }

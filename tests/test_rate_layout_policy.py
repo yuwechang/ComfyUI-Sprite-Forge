@@ -1,4 +1,3 @@
-"""Final-rate boundaries and delivery layout, including durations other than one second."""
 from pathlib import Path
 import sys
 import tempfile

@@ -32,35 +32,6 @@
       ]
     },
     {
-      "canonical": "shared/comfyui_forge_schema.py",
-      "owner": "integration (D31)",
-      "targets": [
-        "skills/comfyui-forge-video2dsprite/scripts/comfyui_forge_schema.py"
-      ]
-    },
-    {
-      "canonical": "shared/schemas/common.schema.json",
-      "owner": "A0-contracts",
-      "targets": [
-        "skills/comfyui-forge-video2dsprite/references/schemas/common.schema.json",
-        "skills/comfyui-forge-generate2dmedia/references/schemas/common.schema.json"
-      ]
-    },
-    {
-      "canonical": "shared/schemas/video.schema.json",
-      "owner": "A0-contracts",
-      "targets": [
-        "skills/comfyui-forge-video2dsprite/references/schemas/video.schema.json"
-      ]
-    },
-    {
-      "canonical": "shared/schemas/media.schema.json",
-      "owner": "A0-contracts",
-      "targets": [
-        "skills/comfyui-forge-generate2dmedia/references/schemas/media.schema.json"
-      ]
-    },
-    {
       "canonical": "shared/comfyui_forge_contracts.py",
       "owner": "core-contracts",
       "targets": [

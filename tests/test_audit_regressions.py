@@ -1,4 +1,3 @@
-"""Regression coverage for observed audit failures; no server or GPU calls."""
 import json,sys
 from pathlib import Path
 from fractions import Fraction

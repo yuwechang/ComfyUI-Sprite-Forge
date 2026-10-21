@@ -1,35 +1,12 @@
 #!/usr/bin/env python3
-"""One approved still in, a whole game-ready sprite set out.
-
-  plan     Read master.json (generate2dsprite.master.v1) and write a new set folder with
-           set_plan.json: one image-to-video clip per action and view, each a loop or a
-           motion with explicit spatial requirements, terminal behavior, numeric QC gates, and its own motion
-           prompt built from references/motion-prompts.md.
-  run      Make every action: comfyui_forge_prepare_i2v_input.py input, motion prompt, generate2dmedia
-           the local ComfyUI adapter, comfyui_forge_video2dsprite.py process --matte soft, the numeric QC
-           gates, automatic retakes with prompt fixes (up to --max-takes), comfyui_forge_register_clip.py
-           apply, comfyui_forge_gait_loop.py select (loops) or comfyui_forge_retime.py (one-shots), comfyui_forge_finish_frames.py
-           hd|pixel, then standard finalization and verified PNG/sheet/GIF/source delivery. Every step is recorded in
-           set_state.json and takes.jsonl, so running it again resumes where it stopped.
-  review   Contact sheet per action and take, a cast line-up and review.json, for the host
-           agent to LOOK at before it accepts anything.
-  accept   Record the agent's semantic approval of one take.
-  retake   Record a semantic rejection with a prompt fix; the next run makes a new take.
-  report   One JSON with every action's route, takes, QC numbers, loop or timing and output
-           files.
-
-Exit codes: 0 done; 1 refused input or failed step; 2 usage.
-Generation uses local ComfyUI directly and never selects another provider.
-"""
+"""Plan, generate, review and deliver character animation sets through local ComfyUI."""
 from __future__ import annotations
 
 import comfyui_forge_contracts
 import comfyui_forge_animation_spec
 import comfyui_forge_finalize_animation
 import comfyui_forge_gait_loop
-from comfyui_forge_motion_contract import MODES
 import argparse
-import concurrent.futures
 import json
 import math
 import os
@@ -66,7 +43,6 @@ PLAN_SCHEMA = "video2dsprite.sprite_set_plan.v1"
 STATE_SCHEMA = "video2dsprite.sprite_set_state.v1"
 TAKE_SCHEMA = "video2dsprite.sprite_set_take.v1"
 QC_SCHEMA = "video2dsprite.sprite_set_qc.v1"
-REVIEW_SCHEMA = "video2dsprite.sprite_set_review.v1"
 REPORT_SCHEMA = "video2dsprite.sprite_set_report.v1"
 PLAN_FILE, STATE_FILE, TAKES_FILE = "set_plan.json", "set_state.json", "takes.jsonl"
 LIBRARY_FILE = HERE.parent / "references" / "motion-prompts.md"
@@ -77,14 +53,11 @@ FINISH_SCRIPT = HERE / "comfyui_forge_finish_frames.py"
 TOOL_TIMEOUT = 1800.0
 VIEWS = ("side", "front", "back")
 FINISHES = ("hd", "pixel")
-TARGET_HEIGHT = {"hd": 256, "pixel": 80}      # finished body height in px for a hero
 LUMA = np.array([0.299, 0.587, 0.114], np.float32)
 QC_SUBJECT_PX = 112                          # QC works on frames reduced to about this body height
 GATE_IDS = ("area", "feet", "identity", "zoom", "turn", "edge", "background", "extra", "motion", "end-pose",
             "colour", "timing", "loop", "registration", "keying")
 
-
-# --------------------------------------------------------------------------- action and canvas presets
 
 @dataclass(frozen=True)
 class ActionPreset:
@@ -124,16 +97,10 @@ CANVAS_PRESETS = {"square": {"aspect": None, "headroom": None, "lead": 0.0},
 BASE_GATES: dict[str, dict[str, Any]] = {
     "area": {"min": 0.72, "max": 1.32, "maxBadShare": 0.1},
     "feet": {"max": 0.05, "badFrames": 3, "mode": "all"},
-    # Identity: frame 0 must reproduce the master (start); afterwards the head is matched against the master and
-    # frame 0 at 3 scales and a turned or bobbing head only warns (min). Only a severe loss fails: more than half
-    # the frames under 0.30 (calibrated on the 2026-10-06 live run, where the old hard 0.5 floor rejected 18 of 24
-    # good takes and no real identity loss happened).
+    # Identity: require the initial master pose; later head-match failures need a majority of frames.
     "identity": {"start": 0.8, "min": 0.5, "badFrames": 2, "severe": 0.30, "severeShare": 0.5,
                  "scales": [0.9, 1.0, 1.1]},
-    # Colour: a frame is bled when more than 2% of the body shows a hue no master colour at that height has
-    # (chroma > 0.05 and 0.06 or more from every master colour of the band, in OKLab a/b); the take fails when 15%
-    # of its frames are (live run: 29-41% on the six bled runs, at most 7% on the 24 good takes). Region drift (a
-    # part shifted, which the finish's colour lock undoes) only warns: over 0.03 in 40% of the frames.
+    # Colour: reject persistent foreign hues; correctable regional drift only warns.
     "colour": {"foreign": 0.02, "badShare": 0.15, "drift": 0.03, "driftShare": 0.4},
     # Timing (one-shots): the motion from onset to settle and the longest static hold inside it. Too slow warns
     # while the set retimes one-shots (retime --auto-oneshot) and fails when it keeps the clip's speed.
@@ -148,8 +115,6 @@ BASE_GATES: dict[str, dict[str, Any]] = {
     "window": {"loopSeconds": 1.0},
 }
 
-
-# --------------------------------------------------------------------------- small helpers
 
 def _ascii(text: Any) -> str:
     return comfyui_forge_core.ascii_text(str(text))
@@ -175,7 +140,8 @@ def _last_part(path: str) -> str:
 
 def _scrub(value: Any) -> Any:
     """A JSON value with every absolute path cut to its last component, also inside messages (written JSON
-    never holds one); keys starting with _ are dropped."""
+    never holds one); keys starting with _ are dropped.
+    """
     if isinstance(value, dict):
         return {str(key): _scrub(item) for key, item in value.items() if not str(key).startswith("_")}
     if isinstance(value, (list, tuple)):
@@ -190,7 +156,6 @@ def _scrub(value: Any) -> Any:
 
 
 def _json_line(text: str) -> dict | None:
-    """The last line of ``text`` that is a JSON object (every forge CLI prints one summary line)."""
     for line in reversed(text.splitlines()):
         line = line.strip()
         if line.startswith("{") and line.endswith("}"):
@@ -219,7 +184,6 @@ def _pngs(folder: Path) -> list[Path]:
 
 
 def _ranges(frames: Sequence[int], limit: int = 8) -> str:
-    """'3-7, 12, 20-21' for a sorted list of frame numbers."""
     runs: list[list[int]] = []
     for frame in sorted(set(int(f) for f in frames)):
         if runs and frame == runs[-1][1] + 1:
@@ -255,19 +219,9 @@ def _move_aside(path: Path) -> Path:
 
 
 def _write_new_json(path: Path, data: Any) -> None:
-    """Publish a JSON file that must not exist yet (no-replace)."""
     stage = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
         comfyui_forge_core.write_json(stage, data, no_clobber=False)
-        comfyui_forge_core.publish_file_no_replace(stage, path)
-    finally:
-        stage.unlink(missing_ok=True)
-
-
-def _publish_png(image: Image.Image | np.ndarray, path: Path) -> None:
-    stage = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        comfyui_forge_core.save_png(image, stage)
         comfyui_forge_core.publish_file_no_replace(stage, path)
     finally:
         stage.unlink(missing_ok=True)
@@ -303,8 +257,6 @@ def _fps_fraction(text: Any) -> Fraction:
     return rate.limit_denominator(1000)
 
 
-# --------------------------------------------------------------------------- tools by path
-
 class ToolFailure(RuntimeError):
     """A sibling CLI exited non-zero; ``message`` is its error line."""
 
@@ -336,8 +288,6 @@ def run_tool(script: Path, args: Sequence[Any], *, timeout: float = TOOL_TIMEOUT
     warnings = [line.strip()[8:].strip() for line in stderr.splitlines() if line.strip().startswith("warning:")]
     return summary, warnings
 
-
-# --------------------------------------------------------------------------- the prompt library
 
 _FENCE = re.compile(r"^```(template|negatives|clauses|gatefix)(?:[ \t]+([A-Za-z0-9_-]+))?[ \t]*\r?\n(.*?)^```[ \t]*$",
                     re.M | re.S)
@@ -391,7 +341,6 @@ def load_library(path: Path = LIBRARY_FILE) -> Library:
 
 
 def fill(text: str, words: dict[str, str]) -> str:
-    """Replace {facing}, {toward}, {away}, {pos}, {key}, {style} and {action}; unknown names stay."""
     return _PLACEHOLDER.sub(lambda match: words.get(match.group(1), match.group(0)), text)
 
 
@@ -417,7 +366,6 @@ def key_words(key: str) -> tuple[str, str]:
 
 
 def identity_phrase(recap: str) -> str:
-    """'The same <recap>' without a doubled article or a closing full stop."""
     text = " ".join(str(recap).split()).rstrip(" .")
     text = re.sub(r"^(?:the same|a|an|the)\s+", "", text, flags=re.I)
     return text
@@ -428,10 +376,8 @@ def moves_feet(entry: dict) -> bool:
     return bool(entry.get('movesFeet') or entry.get('airborne'))
 
 
-
 def build_prompt(entry: dict, plan: dict, fixes: Sequence[str]) -> str:
-    """The game-opus55 prompt shape: 'The same <identity>' + facing lock + ONE action + same start
-    and end pose + negatives and fix clauses + locked camera, flat key background, exact style."""
+    """Build the action prompt from identity, motion properties, background and fix clauses."""
     master = plan["masters"][entry["view"]]
     key = entry.get("generationKey",plan["key"])
     words = prompt_words(master["facing"], key, plan["style"], plan["pronoun"], entry["action"])
@@ -465,13 +411,10 @@ def build_prompt(entry: dict, plan: dict, fixes: Sequence[str]) -> str:
 
 
 def lint_findings(prompt: str, key: str) -> list[dict[str, str]]:
-    """prepare_i2v_input lint, minus the numeric work region and timeline rules: the game-opus55 recipe
-    frames the clip by the input image and names one action instead."""
+    """Lint the action prompt without the preparation tool's numeric region and timeline rules."""
     return [item for item in prep.lint_prompt(prompt, key if key in comfyui_forge_matte.DECLARED_KEYS else None)
             if item["rule"] not in ("missing-work-region", "missing-timeline")]
 
-
-# --------------------------------------------------------------------------- the master
 
 @dataclass(frozen=True)
 class Master:
@@ -577,7 +520,8 @@ def _master_png_ref(data: dict, base: Path) -> tuple[Path, str | None]:
 
 def load_master(path: Path) -> Master:
     """Read master.json, check the padded PNG's sha256, key an opaque master like prepare_i2v_input does
-    and measure the subject box, the stance anchor and the opaque area."""
+    and measure the subject box, the stance anchor and the opaque area.
+    """
     path = Path(path)
     try:
         data = comfyui_forge_core.read_json(path)
@@ -622,12 +566,11 @@ def load_master(path: Path) -> Master:
                   area=int((alpha > 127).sum()), framing=framing, style=style)
 
 
-# --------------------------------------------------------------------------- placement
-
 def placement(master: Master, preset: str) -> dict:
     """The provider canvas of one action: the master placed by one recorded transform (prepare_i2v_input
     --canvas --scale --root --anchor), its margin and the action padding that covers the whole video
-    footprint on the master canvas (so register_clip never clips motion)."""
+    footprint on the master canvas (so register_clip never clips motion).
+    """
     spec = CANVAS_PRESETS[preset]
     W0, H0 = master.size
     x0, y0, x1, y1 = master.box
@@ -665,8 +608,6 @@ def placement(master: Master, preset: str) -> dict:
             "headroom": round(placed[1] / height, 4)}
 
 
-# --------------------------------------------------------------------------- QC gates (numeric)
-
 def _block_mean(array: np.ndarray, factor: int) -> np.ndarray:
     """Mean of factor x factor blocks (the trailing partial block is dropped), as float32."""
     if factor <= 1:
@@ -680,7 +621,8 @@ def _block_mean(array: np.ndarray, factor: int) -> np.ndarray:
 class QcFrame:
     """One take frame reduced for the gates: alpha (0-255), luma over mid grey, raw RGB, the edge touch
     measured at full resolution and, for the colour gate, the frame's colours (straight RGBA) reduced half
-    as much as the rest."""
+    as much as the rest.
+    """
 
     alpha: np.ndarray
     luma: np.ndarray
@@ -728,7 +670,8 @@ def _crop_padded(image: np.ndarray, left: int, top: int, width: int, height: int
 
 def ncc_best(template: np.ndarray, image: np.ndarray, x0: int, y0: int, search: int) -> float | None:
     """Best zero-mean NCC of ``template`` with its top-left within +-search px of (x0, y0) in ``image``
-    (padded with the mid-grey backdrop); None for a flat template."""
+    (padded with the mid-grey backdrop); None for a flat template.
+    """
     height, width = template.shape
     centred = template.astype(np.float64) - float(template.mean())
     norm = math.sqrt(float((centred * centred).sum()))
@@ -804,7 +747,6 @@ def _head_box(mask: np.ndarray, stats: dict) -> tuple[int, int, int, int] | None
 
 
 def _runs(flags: Sequence[bool]) -> list[tuple[int, int]]:
-    """[start, end) of every run of True."""
     runs, start = [], None
     for index, flag in enumerate(list(flags) + [False]):
         if flag and start is None:
@@ -835,7 +777,8 @@ def _scaled(template: np.ndarray, scale: float) -> tuple[np.ndarray, int, int]:
 def _timing_phases(steps: Sequence[float], fps: float) -> dict:
     """One-shot motion from the per-frame luma change (retime --auto-oneshot's rule): moving frames are at least
     max(0.15, 20% of the 90th-percentile step) (3-frame mean); the action runs from the first to the last moving
-    frame and the longest still run inside it is the hold."""
+    frame and the longest still run inside it is the hold.
+    """
     values = np.asarray(steps, np.float64)
     if values.size < 3:
         return {"actionSeconds": 0.0, "holdSeconds": 0.0, "onset": None, "settle": None}
@@ -860,7 +803,7 @@ def evaluate_take(frames: Sequence[QcFrame], reference: QcFrame, *, key: str, ga
                   master: Any = None, timing_mode: str | None = None) -> dict:
     """Score one keyed take against the master as the job placed it (both reduced alike).
 
-    Gates (game-opus55 take loop, recalibrated on the 2026-10-06 live run): opaque-area ratio to the master,
+    Gates: opaque-area ratio to the master,
     feet drift (runs: the half-second rolling median, so a flight phase is not drift), identity (frame 0
     against the master; then the head against the master and frame 0 at three scales, a warning unless the
     design is lost in most frames), camera push-in or zoom, turning around (mirrored head NCC and mirrored
@@ -869,7 +812,8 @@ def evaluate_take(frames: Sequence[QcFrame], reference: QcFrame, *, key: str, ga
     timing (slow motion and long holds; warns while the set retimes one-shots, ``timing_mode`` "auto") and,
     for one-shots, the return to the start pose. Returns the QC document with per-frame numbers, the failing
     gate ids, readable reasons with frame numbers, the warnings and the longest usable window of frames that
-    pass every per-frame gate."""
+    pass every per-frame gate.
+    """
     count = len(frames)
     if count < 2:
         raise ValueError("a take needs at least two frames")
@@ -1030,7 +974,7 @@ def evaluate_take(frames: Sequence[QcFrame], reference: QcFrame, *, key: str, ga
         if "severe" in id_gate:
             failed = not start_ok or len(lost) > severe_share * count
             flagged = set(lost)
-        else:   # a plan written before the recalibration keeps its hard per-frame floor
+        else:   # Preserve explicit per-frame thresholds in older plans.
             failed = not start_ok or len(low_frames) > id_gate["badFrames"]
             flagged = set(low_frames)
         bad["identity"] = [i in flagged for i in range(count)]
@@ -1240,7 +1184,8 @@ def qc_take(job_path: Path, clean_dir: Path, raw_dir: Path | None, *, key: str, 
             timing_mode: str | None = None) -> dict:
     """Load a keyed take (video2dsprite process frames-clean and frames-raw) and the master as the job placed it
     in the video, reduce both alike and run evaluate_take (the colour gate learns the master's colours from the
-    placed master)."""
+    placed master).
+    """
     clean = _pngs(clean_dir)
     if len(clean) < 2:
         raise ValueError(f"{clean_dir.name} holds {len(clean)} keyed frames; a take needs at least two")
@@ -1279,8 +1224,6 @@ def qc_take(job_path: Path, clean_dir: Path, raw_dir: Path | None, *, key: str, 
     return result
 
 
-# --------------------------------------------------------------------------- plan
-
 def default_gates(action: str, preset: ActionPreset, klass: str, view: str) -> dict:
     """Geometry/QC constraints from explicit properties, never the motion id."""
     gates = json.loads(json.dumps(BASE_GATES))
@@ -1303,8 +1246,6 @@ def oneshot_timing(entry: dict) -> dict:
     if isinstance(timing, dict) and timing.get("mode") in ("auto", "source"):
         return timing
     return {"mode": "source"}
-
-
 
 
 def _parse_list(text: str, allowed: Sequence[str], name: str) -> list[str]:
@@ -1363,7 +1304,7 @@ def cmd_plan(args: argparse.Namespace) -> dict:
         if view in extra_masters:
             masters[view] = load_master(extra_masters[view])
         elif view == "side" or ("side" not in views and view == views[0]):
-            masters[view] = master   # --master is the side still, or the first view's when side is not planned
+            masters[view] = master
         else:
             raise ValueError(f"the {view} view needs its own approved still: --view-master {view}=<master.json>")
         if masters[view].key != master.key:
@@ -1513,39 +1454,10 @@ def cmd_plan(args: argparse.Namespace) -> dict:
             "lintWarnings": sum(len(entry["lint"]) for entry in plan["actions"])}
 
 
-# --------------------------------------------------------------------------- finishing (seam)
-
-
-
-def _palette_image(colours: np.ndarray) -> Image.Image:
-    """A P-mode palette image for Image.quantize(palette=...); unused slots repeat the first colour."""
-    colours = np.asarray(colours, np.uint8).reshape(-1, 3)[:256]
-    flat = np.concatenate([colours, np.repeat(colours[:1], 256 - len(colours), axis=0)]).reshape(-1)
-    image = Image.new("P", (1, 1))
-    image.putpalette([int(value) for value in flat])
-    return image
-
-
-def _load_palette(path: Path) -> np.ndarray:
-    if path.suffix.lower() == ".json":
-        data = comfyui_forge_core.read_json(path)
-        values = data.get("colors") or data.get("colours") or data.get("palette") if isinstance(data, dict) else data
-        colours = [[int(str(value).lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)] for value in values or []]
-    else:
-        rgba = np.asarray(comfyui_forge_core.load_rgba(path)[0])
-        colours = np.unique(rgba[rgba[..., 3] > 0][:, :3], axis=0).tolist()
-    if not 1 <= len(colours) <= 256:
-        raise ValueError(f"palette {path.name} needs 1-256 colours; it has {len(colours)}")
-    return np.asarray(colours, np.uint8)
-
-
-
-
-
-
 def _tick_grid(fps: Any) -> tuple[int, int]:
     """(tick Hz, ticks per frame): the 60 Hz forge grid when a frame is a whole number of 60 Hz ticks, else the
-    rate's own fraction (24 fps: 24 Hz x 1; 12.5 fps or 80 ms frames: 25 Hz x 2)."""
+    rate's own fraction (24 fps: 24 Hz x 1; 12.5 fps or 80 ms frames: 25 Hz x 2).
+    """
     rate = _fps_fraction(fps)
     per = Fraction(60) / rate
     if per.denominator == 1:
@@ -1558,8 +1470,6 @@ def _plan_fps(plan: dict) -> Fraction | None:
     value = (plan.get("package") or {}).get("fps")
     return None if value in (None, 0) else _fps_fraction(value)
 
-
-# --------------------------------------------------------------------------- the set runner
 
 _CLIP_SUFFIXES = (".mp4", ".webm", ".mov", ".m4v")
 
@@ -1610,7 +1520,6 @@ class SetRunner:
         self.notes: list[str] = []
         self.media_name = ""
 
-    # ----------------------------------------------------------------- bookkeeping
 
     def rel(self, path: Path | str) -> str:
         return comfyui_forge_core.manifest_path(path, self.root)
@@ -1668,7 +1577,8 @@ class SetRunner:
 
     def stage(self, record: dict, name: str, make: Callable[[Path], dict]) -> dict:
         """Run one tool step into <take>/<name> unless the state already records it (resume). A folder the
-        state does not know (a crash between publish and save) is kept aside as <name>.orphan-N."""
+        state does not know (a crash between publish and save) is kept aside as <name>.orphan-N.
+        """
         stages = record.setdefault("stages", {})
         out = self.root / record["dir"] / name
         done = stages.get(name)
@@ -1702,7 +1612,6 @@ class SetRunner:
             if ref and comfyui_forge_core.sha256_file(self.root/ref['path'])!=ref['sha256']:
                 raise ValueError('a frozen matte profile or palette changed; restore the planned input')
 
-    # ----------------------------------------------------------------- jobs and prompts
 
     def ensure_job(self, ident: str) -> dict:
         st = self.astate(ident)
@@ -1780,7 +1689,6 @@ class SetRunner:
         self.save()
         return record
 
-    # ----------------------------------------------------------------- generation
 
     def generate(self, ident: str, record: dict, timeout: float) -> dict:
         """Resume tracked jobs before adopting supplied clips; never resubmit a failed attempt."""
@@ -1850,7 +1758,6 @@ class SetRunner:
         self.save()
         return "error"
 
-    # ----------------------------------------------------------------- per-take tools
 
     def run_key(self, ident: str, record: dict, out: Path) -> dict:
         job = self.root / self.astate(ident)["job"]["dir"]
@@ -1962,7 +1869,8 @@ class SetRunner:
     def run_auto_oneshot(self, ident: str, record: dict, out: Path, frames: Path, fps_text: str, motion: dict,
                          offset: int, count: int, timing: dict) -> dict:
         """comfyui_forge_retime.py --auto-oneshot over the registered frames: the game length and keys from the plan's timing,
-        the key source frames and events explicitly reviewed within the selected candidate."""
+        the key source frames and events explicitly reviewed within the selected candidate.
+        """
         entry = self.entries[ident]
         source = _fps_fraction(fps_text)
         target = _plan_fps(self.plan)
@@ -2002,11 +1910,6 @@ class SetRunner:
                            "auto": summary.get("auto")}}
 
 
-
-
-    # ----------------------------------------------------------------- evaluation and retakes
-
-
     def evaluate(self, ident, record):
         st=self.astate(ident)
         try:
@@ -2023,9 +1926,6 @@ class SetRunner:
             st['chosen']=None;st['status']='blocked';st['message']=str(error)
         self.log_take(ident,record);self.save()
 
-
-
-    # ----------------------------------------------------------------- finishing, packaging, verify
 
     def scale_ref_file(self, ident: str) -> Path | None:
         ref = self.plan["finish"].get("scaleRefAction")
@@ -2044,7 +1944,8 @@ class SetRunner:
 
     def ref_palette_file(self, ident: str) -> Path | None:
         """Pixel sets without a plan palette: the palette the scale-reference action learned (palette.json in its
-        finish folder), so every action of the character shares one palette."""
+        finish folder), so every action of the character shares one palette.
+        """
         ref = self.plan["finish"].get("scaleRefAction")
         if not ref or ref == ident:
             return None
@@ -2120,8 +2021,6 @@ class SetRunner:
                 "scaleRefFrom": self.rel(scale_ref) if scale_ref else None}
 
 
-
-
     def verify_clip(self, record: dict) -> None:
         """Check the frozen input even when later processing stages already exist."""
         clip = record.get("clip") or {}
@@ -2168,7 +2067,6 @@ class SetRunner:
             comfyui_forge_core.write_json(out/'review.json',receipt,no_clobber=False)
         return {'review':str(out/'review.json'),'sourceIndices':receipt['sourceIndices']}
 
-    # ----------------------------------------------------------------- the whole run
 
     def verify_delivery(self,ident):
         st=self.astate(ident);output=st.get('output') or {};folder=self.root/output.get('package','')
@@ -2225,8 +2123,6 @@ class SetRunner:
         return summary, code
 
 
-# --------------------------------------------------------------------------- review sheets
-
 def cmd_review(args):
     runner=SetRunner(Path(args.plan));items=[]
     for ident in runner.order():
@@ -2240,8 +2136,6 @@ def cmd_review(args):
                           'contact':str(work/'review-contact.png'),'review':str(work/'review.json'),'qualityChecks':record.get('qc',{})})
     return {'status':'needs-review','items':items,'instruction':'inspect the actual final animation, contract, timing and light/dark alpha edges before accepting'}
 
-
-# --------------------------------------------------------------------------- accept, retake, report
 
 def _parse_window(text: str | None) -> list[int] | None:
     if not text:
@@ -2323,7 +2217,7 @@ def cmd_retake(args: argparse.Namespace) -> dict:
             raise ValueError("--fix needs a clause id from motion-prompts.md or the clause text")
         if text in PLANTED_CLAUSES and moves_feet(runner.entries.get(args.action, {})):
             text = MOVING_FEET_CLAUSE   # preserve explicit movement of support points
-            if text not in runner.plan["clauses"]:   # a plan from before the clause existed
+            if text not in runner.plan["clauses"]:
                 fixes.append({"id": text, "text": load_library().clauses[text]})
                 continue
         if text in runner.plan["clauses"]:
@@ -2381,8 +2275,6 @@ def cmd_report(args: argparse.Namespace) -> dict:
             "actions": {item["id"]: item["status"] for item in report["actions"]},
             "needsReview": report["needsReview"]}
 
-
-# --------------------------------------------------------------------------- CLI
 
 def _positive_int(low: int, high: int) -> Callable[[str], int]:
     def parse(text: str) -> int:
@@ -2519,7 +2411,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2; refused input or a failed step exits 1."""
     return comfyui_forge_core.run_cli(_run, argv, expected=comfyui_forge_core.CLI_EXPECTED_ERRORS + (ToolFailure,))
 
 

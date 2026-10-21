@@ -1,4 +1,3 @@
-"""Offline behavioral tests: no ComfyUI server or GPU required (stdlib unittest)."""
 import io
 import json
 from pathlib import Path

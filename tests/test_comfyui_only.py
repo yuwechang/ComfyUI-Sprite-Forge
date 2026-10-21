@@ -1,4 +1,3 @@
-"""Behavioral guardrails for the local-only fork; no GPU or external network."""
 import contextlib
 import io
 from pathlib import Path

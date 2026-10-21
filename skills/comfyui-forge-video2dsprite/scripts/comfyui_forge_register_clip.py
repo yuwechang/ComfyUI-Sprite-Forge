@@ -1,31 +1,5 @@
 #!/usr/bin/env python3
-"""Register image-to-video clips by construction, and judge raw takes.
-
-  apply             Map keyed frames (for example video2dsprite process frames-clean)
-                    onto the master canvas with the one fixed transform recorded by
-                    comfyui_forge_prepare_i2v_input.py: premultiplied resampling, action padding that
-                    grows the canvas and shifts the anchor (never shrinks the body),
-                    optional feet/x/hip locks in whole output pixels, and an actor or
-                    fx profile (edge fade, dissolve tail, displayScale), then the alpha
-                    hygiene floor (alpha <= 4 cleared: invisible resampling halo). Writes
-                    frames/, registration.json and review-contact.png to a new
-                    --output-dir after registration QA.
-  profile           Write a character profile (video2dsprite.character_profile.v1) from
-                    registered clips; later clips inherit it with apply
-                    --character-profile.
-  validate-profile  Check registered clips against a profile and report every clip's
-                    rest-pose foot line (nativeFootBottomRange).
-  qc                Judge a raw take against its job: landmark and identity NCC
-                    (36 px patches, +-15 px search), camera drift and scale in the
-                    calm spans, edge key purity. Appends one take.v1 line to
-                    takes.jsonl (an audit log: kept and rejected takes exit 0;
-                    --strict exits 1 on a rejection, the line still written).
-  palette-repair    Remap off-palette flashes inside given regions to colours sampled
-                    from the master. Alpha never changes; writes an audit report.
-
-Registration is by construction, not by bounding box: every frame of a clip uses
-the same scale and translation, so pose, height and contact changes survive.
-"""
+"""Register image-to-video clips by construction, and judge raw takes."""
 from __future__ import annotations
 
 import argparse
@@ -49,7 +23,7 @@ import comfyui_forge_matte  # noqa: E402
 import comfyui_forge_prepare_i2v_input as prep  # noqa: E402  (sibling script: action templates, placement, key helpers)
 
 TOOL_NAME = "register_clip"
-TOOL_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION  # QA envelopes record the package version (D29)
+TOOL_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION
 REGISTRATION_SCHEMA = "video2dsprite.registration.v1"
 PROFILE_SCHEMA = "video2dsprite.character_profile.v1"
 TAKE_SCHEMA = "video2dsprite.take.v1"
@@ -65,15 +39,15 @@ CONTOUR = 127   # body measurements compared with the crisp master use the 50% a
                 # which resampling blur leaves in place (alpha > 16 grows a resampled body by ~1 px a side)
 
 DEFAULT_MAX_ANCHOR_ERROR = 2.0    # output px between the rest frame and the master (same measurement)
-DEFAULT_MAX_SCALE_ERROR = 0.03    # amber-quay measured 2.2-4.8% body-scale pumping as visible
+DEFAULT_MAX_SCALE_ERROR = 0.03    # Maximum relative body-scale variation.
 DEFAULT_GROUND_MIN_RUN = 3        # px a row needs to count as the ground line (ignores specks)
 LOCK_MARGIN = 0.06                # locked frames are registered once with this much room (share of the canvas)
-FX_EDGE_FADE = 0.085              # Dusk FX: 46 px boundary falloff on a 540 px canvas
-FX_FADE_IN_FRAMES = 2             # Dusk FX: transparent first frame, 50 ms appearance
-FX_DISSOLVE_TAIL = 0.2            # Dusk FX: final 20% alpha dissolve, at least 4 frames
+FX_EDGE_FADE = 0.085              # Boundary falloff as a share of the canvas.
+FX_FADE_IN_FRAMES = 2             # Appearance fade duration in milliseconds.
+FX_DISSOLVE_TAIL = 0.2            # Tail dissolve fraction; use at least four frames.
 FX_DISSOLVE_MIN_FRAMES = 4
 
-QC_PATCH = 36                     # Dusk qa-registration.py: 36 px zero-mean NCC patches
+QC_PATCH = 36                     # Patch width for zero-mean normalized cross-correlation.
 QC_SEARCH = 15                    # ... searched +-15 px
 QC_SUBJECT_DISTANCE = 64.0        # RGB distance from the estimated key that counts as subject in raw frames
 QC_CHANGE_LEVELS = 16             # luma change that counts as motion, above codec noise
@@ -82,7 +56,7 @@ DEFAULT_MAX_DRIFT = 2.0           # source px
 DEFAULT_MIN_LANDMARK_NCC = 0.6
 DEFAULT_MIN_IDENTITY_NCC = 0.5
 DEFAULT_MAX_EDGE_IMPURE = 0.0005  # share of the border band
-HYGIENE_FLOOR = 4                 # D18: registered frames lose alpha <= 4 (forge_core.alpha_hygiene floor)
+HYGIENE_FLOOR = 4                 # Alpha hygiene clears near-transparent resampling noise.
 MATTE_MODES = ("soft", "dominance", "binary")
 
 
@@ -94,14 +68,11 @@ class RegistrationQAError(ValueError):
         self.padding = list(padding or [0, 0, 0, 0])
 
 
-
-# --------------------------------------------------------------------------- small helpers
-
 def _ascii(text: Any) -> str:
     return comfyui_forge_core.ascii_text(str(text))
 
 
-_round_half_up = comfyui_forge_core.round_half_up  # floor(value + 1/2), never banker's rounding (D30)
+_round_half_up = comfyui_forge_core.round_half_up  # floor(value + 1/2), never banker's rounding
 
 
 def _natural_key(path: Path) -> list:
@@ -120,12 +91,13 @@ def list_frames(directory: str | Path, pattern: str = "*.png") -> list[Path]:
 
 def ref_path(path: str | Path, base: str | Path) -> str:
     """Manifest-relative POSIX path, or just the file name when no relative path exists
-    (another drive): manifests never hold absolute paths (forge_core.manifest_path, D30)."""
+    (another drive): manifests never hold absolute paths (forge_core.manifest_path).
+    """
     return comfyui_forge_core.manifest_path(path, base)
 
 
 def _file_ref(path: Path, base: Path, digest: str | None = None) -> dict[str, Any]:
-    """A common fileRef {path, sha256, bytes} (forge_core.file_ref, D30)."""
+    """A common fileRef {path, sha256, bytes} (forge_core.file_ref)."""
     return comfyui_forge_core.file_ref(path, base, sha256=digest)
 
 
@@ -188,8 +160,6 @@ def parse_hue(text: str) -> tuple[float, float]:
     return low, high
 
 
-# --------------------------------------------------------------------------- the job
-
 @dataclass(frozen=True)
 class Job:
     """registration_job.v1 plus the geometry derived from it."""
@@ -244,11 +214,12 @@ def _job_key(value: Any) -> str:
 
 def load_job(path: str | Path) -> Job:
     """Read a registration_job.v1 (prepare_i2v_input output or hand-written with the
-    required fields only) and derive the source canvas, anchor and transform."""
+    required fields only) and derive the source canvas, anchor and transform.
+    """
     path = Path(path)
     raw = path.read_bytes()
     try:
-        data = comfyui_forge_core.parse_json(raw)  # UTF-8 with or without a BOM (D28)
+        data = comfyui_forge_core.parse_json(raw)
     except ValueError:
         raise ValueError(f"{path.name} is not valid JSON") from None
     if not isinstance(data, dict) or data.get("schema") != prep.JOB_SCHEMA:
@@ -320,8 +291,6 @@ def measure_mode(job: Job) -> str:
     return job.anchor_mode if job.anchor_mode in comfyui_forge_core.ANCHOR_MODES else "stance"
 
 
-# --------------------------------------------------------------------------- the transform
-
 @dataclass(frozen=True)
 class VideoFit:
     """How the provider canvas maps onto the returned video: video = k * reference + c."""
@@ -337,7 +306,8 @@ def video_fit(canvas: Sequence[int], size: Sequence[int], fit: str) -> VideoFit:
     """stretch: separate x/y factors (sx = W/1280, sy = H/720). cover: one factor, centred
     crop (Grok's 1264x720 from 1280x720 is a fixed centre crop). contain: one factor,
     centred letterbox. auto: one factor when the aspect ratios match (960x960 from a square
-    input), otherwise cover."""
+    input), otherwise cover.
+    """
     (ref_w, ref_h), (width, height) = canvas, size
     ratio_x, ratio_y = width / ref_w, height / ref_h
     same_aspect = width * ref_h == height * ref_w
@@ -424,7 +394,8 @@ def _local_resample_anisotropic(pixels: np.ndarray, scale_xy: Sequence[float], r
 def register_frame(pixels: np.ndarray, job: Job, fit: VideoFit, padding: Sequence[int],
                    out_size: Sequence[int], resampler: str, shift: Sequence[int] = (0, 0)) -> np.ndarray:
     """One frame through the clip's single inverse transform: the job anchor lands exactly
-    on (anchor + padding + shift) with the exact scale (premultiplied, grid pinned)."""
+    on (anchor + padding + shift) with the exact scale (premultiplied, grid pinned).
+    """
     scale_x, scale_y = output_scale(job, fit)
     source = anchor_in_video(job, fit)
     target = (job.source_anchor[0] + padding[0] + shift[0], job.source_anchor[1] + padding[1] + shift[1])
@@ -445,8 +416,6 @@ def place_in_video(view: np.ndarray, job: Job, fit: VideoFit) -> np.ndarray:
                                                    anchor_dst=target, out_size=fit.size))
     return _local_resample_anisotropic(view, scale, "lanczos", (0.0, 0.0), target, fit.size)
 
-
-# --------------------------------------------------------------------------- silhouette measurements
 
 @dataclass(frozen=True)
 class Silhouette:
@@ -477,8 +446,9 @@ def silhouette(alpha: np.ndarray, min_run: int) -> Silhouette | None:
 
 
 def hip_x(mask: np.ndarray, ground: float, height: float) -> float | None:
-    """Body root x (game-opus55 _hip): per row of the hip band (0.55 to 0.25 of the rest height
-    above the ground line), the centre of the widest run; blades and scarf tips are never it."""
+    """Estimate body-root x from the widest runs in the hip band,
+    between 0.25 and 0.55 of the rest height above the ground line.
+    """
     first = max(0, _round_half_up(ground - 0.55 * height))
     last = min(mask.shape[0], _round_half_up(ground - 0.25 * height))
     centres = []
@@ -494,8 +464,6 @@ def hip_x(mask: np.ndarray, ground: float, height: float) -> float | None:
 def anchor_band(height: int) -> int:
     return max(2, _round_half_up(0.04 * height))
 
-
-# --------------------------------------------------------------------------- profiles
 
 def _identity_from_job(job: Job) -> dict[str, Any]:
     return {"masterSha256": job.master_sha256, "sourceSize": list(job.source_size),
@@ -516,7 +484,8 @@ def _identity_from_profile(doc: dict[str, Any]) -> dict[str, Any]:
 
 def identity_mismatches(expected: dict[str, Any], actual: dict[str, Any], scale_tolerance: float) -> list[str]:
     """Differences that would make two clips of one character disagree (master, canvas,
-    anchor, reference scale, anchor mode)."""
+    anchor, reference scale, anchor mode).
+    """
     problems = []
     shas = expected.get("masterSha256"), actual.get("masterSha256")
     if all(shas) and shas[0] != shas[1]:
@@ -537,7 +506,7 @@ def identity_mismatches(expected: dict[str, Any], actual: dict[str, Any], scale_
 def _load_document(path: str | Path, schema: str) -> dict[str, Any]:
     path = Path(path)
     try:
-        data = comfyui_forge_core.read_json(path)  # UTF-8 with or without a BOM (D28)
+        data = comfyui_forge_core.read_json(path)
     except (OSError, ValueError) as error:
         raise ValueError(f"Cannot read {path.name}: {error}") from None
     if not isinstance(data, dict) or data.get("schema") != schema:
@@ -564,12 +533,11 @@ def load_profile(path: str | Path) -> dict[str, Any]:
     return data
 
 
-# --------------------------------------------------------------------------- apply
-
 def _fx_edge_fade(job: Job, fit: VideoFit, padding: Sequence[int], out_size: Sequence[int],
                   fade_px: float) -> tuple[np.ndarray, list[float]]:
     """Smoothstep falloff toward the edge of what the provider could draw: the output canvas
-    clipped to the video footprint, so escaping energy dissipates before any hard edge."""
+    clipped to the video footprint, so escaping energy dissipates before any hard edge.
+    """
     x0, y0 = video_to_output(job, fit, padding, (0.0, 0.0))
     x1, y1 = video_to_output(job, fit, padding, fit.size)
     rect = [max(0.0, x0), max(0.0, y0), min(float(out_size[0]), x1), min(float(out_size[1]), y1)]
@@ -584,7 +552,7 @@ def _fx_edge_fade(job: Job, fit: VideoFit, padding: Sequence[int], out_size: Seq
 
 
 def _fx_time_fade(index: int, count: int, fade_in: int, tail: int) -> float:
-    """Dusk FX alpha envelope: min(1, i / fade_in, (n - 1 - i) / tail)."""
+    """Alpha envelope: min(1, i / fade_in, (n - 1 - i) / tail)."""
     factor = 1.0
     if fade_in > 0:
         factor = min(factor, index / fade_in)
@@ -702,7 +670,8 @@ def _load_frame(plan: ApplyPlan, path: Path) -> tuple[np.ndarray, str]:
 
 def _rest_pass(plan: ApplyPlan, mode: str, band: int) -> list[dict[str, Any]]:
     """Register the rest frames (source indices, inside or outside --range) without locks and
-    measure them (anchor, foot line, x, hip)."""
+    measure them (anchor, foot line, x, hip).
+    """
     measures = []
     for index in plan.rest_frames:
         pixels, _ = _load_frame(plan, plan.all_files[index])
@@ -719,7 +688,8 @@ def _rest_pass(plan: ApplyPlan, mode: str, band: int) -> list[dict[str, Any]]:
 def _lock_targets(rest: list[dict[str, Any]], master: Silhouette, master_hip: float | None,
                   padding: Sequence[int]) -> dict[str, Any]:
     """Locks pin every frame to the rest pose as registered (the same measurement, so resampling
-    blur adds no bias); without rest frames, to the master."""
+    blur adds no bias); without rest frames, to the master.
+    """
     if rest:
         hips = [item["hip"] for item in rest if item["hip"] is not None]
         return {"source": "rest", "ground": _round_half_up(float(np.median([item["ground"] for item in rest]))),
@@ -732,8 +702,7 @@ def _lock_targets(rest: list[dict[str, Any]], master: Silhouette, master_hip: fl
 
 def _lock_shift(sil: Silhouette, locks: Sequence[str], targets: dict[str, Any],
                 lock_max: int | None) -> tuple[tuple[int, int], bool]:
-    """Whole-output-pixel shift that pins the foot line (feet) and x (centroid or hip band);
-    whole pixels keep the sampling phase identical in every frame (game-opus55)."""
+    """Use whole-pixel shifts to lock the selected anchor while preserving sampling phase."""
     dx = dy = 0
     if "feet" in locks:
         dy = targets["ground"] - sil.ground
@@ -860,7 +829,7 @@ def _cmd_apply_once(args: argparse.Namespace) -> dict[str, Any]:
                     needed = [max(need, value) for need, value in zip(needed, over)]
             if plan.fx:
                 registered = _scale_alpha(registered, fade * _fx_time_fade(index, count, args.fade_in_frames, tail))
-            # D18: lanczos resampling (forge_core.resample_rgba) rings just outside edges and unpremultiplying
+            # Lanczos rings just outside edges; unpremultiplying
             # alpha 1-4 invents saturated, often key-leaning colours; they are invisible but read as key spill.
             cleaned, floor = comfyui_forge_core.alpha_hygiene(registered, mode="floor", floor=HYGIENE_FLOOR)
             if floor["floor_px"]:
@@ -1047,12 +1016,11 @@ def _apply_checks(fx: bool, args: argparse.Namespace, video_edge: list[int], ove
     return checks, failures
 
 
-# --------------------------------------------------------------------------- profile and validate-profile
-
 def profile_matte(mode: str, key: str, erode: int, unmix: bool | None, despill: str) -> dict[str, Any]:
-    """The ``matte`` block video2dsprite --matte-profile reads (D21): ``unmix`` defaults to the soft matte
+    """The ``matte`` block video2dsprite --matte-profile reads: ``unmix`` defaults to the soft matte
     (the dominance alpha is a ramp and binary alpha has nothing to un-mix, so only soft may un-mix) and
-    ``erode`` is a whole number of px."""
+    ``erode`` is a whole number of px.
+    """
     if mode not in MATTE_MODES:
         raise ValueError(f"--matte-mode must be one of {', '.join(MATTE_MODES)}")
     if unmix and mode != "soft":
@@ -1154,8 +1122,6 @@ def cmd_validate_profile(args: argparse.Namespace) -> dict[str, Any]:
     return summary
 
 
-# --------------------------------------------------------------------------- qc
-
 def _luma(pixels: np.ndarray) -> np.ndarray:
     return pixels[..., :3].astype(np.float32) @ np.array([0.299, 0.587, 0.114], np.float32)
 
@@ -1184,7 +1150,8 @@ def ncc_search(template: np.ndarray, image: np.ndarray, x0: int, y0: int, search
 
 def pick_landmarks(luma: np.ndarray, subject: np.ndarray, count: int, patch: int, search: int) -> list[tuple[int, int]]:
     """Up to ``count`` well-textured patch corners (top-left) on the subject: Shi-Tomasi
-    response over the patch, at least a quarter subject coverage, greedy spacing of one patch."""
+    response over the patch, at least a quarter subject coverage, greedy spacing of one patch.
+    """
     gradient_y, gradient_x = np.gradient(luma.astype(np.float64))
     sxx = _box_sum(gradient_x * gradient_x, patch, patch)
     syy = _box_sum(gradient_y * gradient_y, patch, patch)
@@ -1323,7 +1290,8 @@ class TakeReference:
 def _identity_box(job: Job, fit: VideoFit, mask: np.ndarray, box: Sequence[int], size: Sequence[int],
                   requested: Sequence[int] | None) -> list[int] | None:
     """--identity-box (master px) in video px, or the head: the top 35% of the subject, as wide as its
-    top 20% plus a margin."""
+    top 20% plus a margin.
+    """
     if requested:
         x0, y0 = (int(math.floor(v)) for v in master_to_video(job, fit, requested[:2]))
         x1, y1 = (int(math.ceil(v)) for v in master_to_video(job, fit, requested[2:]))
@@ -1408,9 +1376,8 @@ def _judge_take(job: Job, view: np.ndarray, files: Sequence[Path], fps: float, t
     band = min(band, max(1, min(size) // 4))
     band_mask = _band_mask(size[1], size[0], band)
     band_px = int(band_mask.sum())
-    calm = max(1, _round_half_up(prep.CALM_SPAN_S * fps))
-    start_span = list(range(min(count, calm)))
-    end_span = list(range(max(0, count - calm), count)) if job.returns_to_rest and count > calm else []
+    start_span = [0]
+    end_span = [count - 1] if job.returns_to_rest and count > 1 else []
     samples = sorted({_round_half_up(i * (count - 1) / max(1, min(args.samples, count) - 1))
                       for i in range(min(args.samples, count))})
 
@@ -1504,7 +1471,7 @@ def _take_line(job: Job, reference: TakeReference, take_id: str, source: dict[st
          f"frame 0 sits {start_drift or 0:.2f} source px from the reference position: check --fit or regenerate")
     gate("camera-scale-end", None if end_scale is None else abs(end_scale - 1) <= args.max_scale_change,
          None if end_scale is None else round(end_scale, 5), args.max_scale_change,
-         f"camera scale {end_scale or 0:.3f} in the end calm span (frames {end_span[0] if end_span else 0}-"
+         f"camera scale {end_scale or 0:.3f} in the final reference frame (frames {end_span[0] if end_span else 0}-"
          f"{end_span[-1] if end_span else 0}): push-in or pull-out; regenerate with 'locked camera, fixed scale'")
     calm_identity = [row["ncc"] for row in identity_rows
                      if (row["frame"] == 0 or row["frame"] in end_span) and row["ncc"] is not None]
@@ -1514,7 +1481,7 @@ def _take_line(job: Job, reference: TakeReference, take_id: str, source: dict[st
          f"identity NCC {identity_min or 0:.2f} below {args.min_identity_ncc:g} in a calm frame: the head region "
          "changed or is covered")
 
-    # calm spans: the share of pixels changed from frame 0, relative to the clip's busiest 10% of frames
+    # reference endpoints: the share of pixels changed from frame 0, relative to the clip's busiest 10% of frames
     busiest = float(np.percentile(changes, 90))
     calm_motion = {}
     for name, span in (("start", start_span), ("end", end_span)):
@@ -1524,12 +1491,12 @@ def _take_line(job: Job, reference: TakeReference, take_id: str, source: dict[st
             checks.append({"id": f"calm-{name}", "status": "warn" if moving else "pass",
                            "value": calm_motion[name], "threshold": 0.5})
             if moving:
-                warnings.append(f"the {name} calm span is not at the reference pose (it changes "
+                warnings.append(f"the {name} reference endpoint is not at the reference pose (it changes "
                                 f"{calm_motion[name]:.2f}x as much as the busiest frames): "
                                 + ("the take starts moving at once; frame 0 is the only rest frame" if name == "start"
                                    else "the take does not return to the reference pose"))
     if end_drift is not None and end_drift > args.max_drift:
-        warnings.append(f"the end calm span sits {end_drift:.2f} source px from the reference: "
+        warnings.append(f"the final reference frame sits {end_drift:.2f} source px from the reference: "
                         "consider apply --lock feet")
     all_identity = [row["ncc"] for row in identity_rows if row["ncc"] is not None]
     metrics = {
@@ -1548,7 +1515,7 @@ def _take_line(job: Job, reference: TakeReference, take_id: str, source: dict[st
         "keyDrift": {"median": float(np.median(key_drift)), "max": float(max(key_drift))},
         "changedShareFromFrame0": {"p90": busiest, "levels": QC_CHANGE_LEVELS},
     }
-    metrics = json.loads(json.dumps(metrics, default=_plain))  # numpy scalars -> JSON numbers
+    metrics = json.loads(json.dumps(metrics, default=_plain))
     job_ref = {"path": ref_path(job.path, takes.resolve().parent), "sha256": job.sha256}
     return {
         "schema": TAKE_SCHEMA,
@@ -1562,12 +1529,12 @@ def _take_line(job: Job, reference: TakeReference, take_id: str, source: dict[st
         "source": {**source, "frames": count, "size": list(size), "fps": fps},
         "qa": {
             "status": "fail" if reasons else "needs-visual-review",
-            "method": "register_clip qc v1: frame 0 and the end calm span against the master as the job placed it; "
+            "method": "register_clip qc v1: frame 0 and the final reference frame against the master as the job placed it; "
                       "36 px zero-mean NCC landmarks and head-region identity, +-15 px search; subject = RGB "
                       "distance > 64 from the take's border key (alpha > 16 for keyed frames); scale = sqrt of the "
                       "subject area ratio, drift = stance anchor shift",
             "notProven": ["mid-clip identity and anatomy (watch the take)",
-                          "camera motion that returns to the reference before the end calm span",
+                          "camera motion that returns to the reference before the final reference frame",
                           "camera motion in takes that end in a new pose (victory, defeat, fx)"],
             "checks": checks,
             "inputs": [job_ref, *inputs],
@@ -1584,8 +1551,6 @@ def master_to_video(job: Job, fit: VideoFit, point: Sequence[float]) -> tuple[fl
     return (fit.k[0] * (job.offset[0] + job.scale * px) + fit.c[0],
             fit.k[1] * (job.offset[1] + job.scale * py) + fit.c[1])
 
-
-# --------------------------------------------------------------------------- palette-repair
 
 def hsv(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Hue in degrees [0, 360), saturation and value in [0, 1] of uint8 RGB."""
@@ -1718,8 +1683,6 @@ def cmd_palette_repair(args: argparse.Namespace) -> dict[str, Any]:
             "totalChangedPx": total, "palette": len(palette)}
 
 
-# --------------------------------------------------------------------------- CLI
-
 def _positive(text: str) -> float:
     value = float(text)
     if not math.isfinite(value) or value <= 0:
@@ -1827,9 +1790,9 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--max-edge-impure", type=_fraction, default=DEFAULT_MAX_EDGE_IMPURE,
                     help="share of the border band allowed off-key (default 0.0005)")
     pq.add_argument("--max-scale-change", type=_positive, default=DEFAULT_MAX_SCALE_CHANGE,
-                    help="calm-span camera scale limit (default 0.03)")
+                    help="reference-endpoint camera scale limit (default 0.03)")
     pq.add_argument("--max-drift", type=_positive, default=DEFAULT_MAX_DRIFT,
-                    help="start-span drift limit in source px (default 2)")
+                    help="initial-frame drift limit in source px (default 2)")
     pq.add_argument("--min-landmark-ncc", type=_fraction, default=DEFAULT_MIN_LANDMARK_NCC)
     pq.add_argument("--min-identity-ncc", type=_fraction, default=DEFAULT_MIN_IDENTITY_NCC)
     pq.add_argument("--strict", action="store_true",
@@ -1878,10 +1841,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2; refused input, failed registration QA, a failed profile validation and a take
-    rejected under --strict exit 1 with ``error: ...``; anything unexpected prints ``error: internal error
-    (...)`` (D26, D27; forge_core.run_cli). qc is an append-only verdict log, not a verify tool: a rejected
-    take is recorded and exits 0 unless --strict."""
     import comfyui_forge_av  # qc --video decodes with ffmpeg: its errors are refused input, not internal errors
     return comfyui_forge_core.run_cli(_run, argv, expected=comfyui_forge_core.CLI_EXPECTED_ERRORS + (comfyui_forge_av.ForgeAVError,))
 

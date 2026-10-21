@@ -1,37 +1,8 @@
-"""Shared chroma keyer for the Agent Sprite Forge skills (API version 1.1).
+"""Shared chroma keying and colour repair.
 
-One canonical keyer replaces the three diverged copies (S11, MAP-12):
-
-* ``legacy_hard_key`` and ``legacy_border_flood_key`` reproduce the cfed170
-  sprite/prop-pack and video keyers bit for bit, vectorised (S03, MAP-13).
-* ``soft_matte`` is the frozen v13 known-key matting keyer of the 2026-10-05
-  edge audit (report v2 P0-1/P0-2): weighted-YCbCr matting, candidate alpha,
-  inward monotonicity, un-mixing, a colour-clean band, optional interior
-  despill and speck removal. Enclosed key holes are background by colour, so
-  they never survive as opaque pockets.
-* ``dominance_matte`` is the fast production key of the Dusk Crossing clips.
-* ``despill``, ``unmix``, ``protect_mask``, ``protect_design_colours`` and
-  ``complement_cleanup`` repair colour; ``temporal_alpha_hysteresis`` and
-  ``flip_count`` handle clips; ``matte_qa`` measures residue; ``key_still``
-  is the one-call still-image keyer.
-
-API 1.1 (Phase 3 integration) adds ``soft_matte_regions``, the same bytes
-as ``soft_matte`` on a sheet for a fraction of the work, which ``key_still``
-now uses (D15), and keyword-only ``threshold``/``edge_threshold`` for
-``key_still(quality="hard")``. Distances and dilations come from forge_core
-1.1 (``distance_to``, ``dilate_square``); results are unchanged.
-
-This file is vendored byte-for-byte into the sprite, map and video skills as
-listed in ``shared/VENDORED.json``; edit only ``shared/comfyui_forge_matte.py`` and run
-``python tools/comfyui_forge_vendor_sync.py --write`` then ``--check``. It imports the
-``forge_core`` copy that sits next to it.
-
-Conventions: images are 8-bit straight-alpha RGBA (``H x W x 4`` uint8 arrays
-or Pillow images); keyed output has RGB zeroed where alpha is 0. A key is a
-declared name (``magenta``, ``green``, ``blue``), ``#rrggbb`` or an RGB triple.
-A key's *dominance* is how far a colour leans to the key's channels: for
-magenta ``min(R, B) - G``, for green ``G - max(R, B)``, for blue
-``B - max(R, G)``. Nothing here is a per-pixel Python loop.
+Images use 8-bit straight-alpha RGBA; output RGB is zero where alpha is zero.
+Keys accept declared names, #rrggbb strings or RGB triples.
+Canonical copies and skill destinations are listed in shared/VENDORED.json.
 """
 
 from __future__ import annotations
@@ -57,8 +28,6 @@ if _CORE_API[0] != "1" or len(_CORE_API) < 2 or not _CORE_API[1].isdigit() or in
                       "run tools/comfyui_forge_vendor_sync.py --write.")
 
 
-FORGE_MATTE_API_VERSION = "1.1"
-
 DECLARED_KEYS = {"magenta": (255, 0, 255), "green": (0, 255, 0), "blue": (0, 0, 255)}
 KEY_QUALITIES = ("hard", "soft", "dominance", "auto")
 DESPILL_MODES = ("off", "edge", "all", "auto")
@@ -80,15 +49,9 @@ _MIN_COVERAGE = 0.01      # below this share of key pixels, an image with alpha 
 _OPAQUE = 250             # ring pixels at or above this alpha count as opaque backdrop
 
 
-# --------------------------------------------------------------------------- parameters and keys
-
 @dataclass(frozen=True)
 class KeyParams:
-    """Soft-matte parameters; the fields and defaults are those of keyer_proto_v13_frozen.py.
-
-    Frozen after tuning on Ryo frames 10, 30, 100-107 and 135 (report v2 5.1).
-    Still images (no chroma subsampling) use ``STILL_KEY_PARAMS``.
-    """
+    """Soft-matte parameters. STILL_KEY_PARAMS uses defaults for full-resolution still images."""
 
     w_chroma: float = 0.2     # chroma weight in the matting space (luma weight 1)
     t_bg: float = 18.0        # weighted |C-K| at/below: background
@@ -125,7 +88,7 @@ class KeyParams:
         return asdict(self)
 
 
-STILL_KEY_PARAMS = KeyParams(w_chroma=1.0, r_c=3)  # stills have full-resolution chroma (report v2 P2-2)
+STILL_KEY_PARAMS = KeyParams(w_chroma=1.0, r_c=3)  # stills have full-resolution chroma
 
 
 class _KeyModel(NamedTuple):
@@ -176,8 +139,6 @@ def _hex(rgb: Sequence[float]) -> str:
     return "#" + "".join(f"{int(round(float(v))):02x}" for v in rgb)
 
 
-# --------------------------------------------------------------------------- array helpers
-
 def _pixels(image: Any) -> np.ndarray:
     """uint8 ``H x W x 3`` or ``H x W x 4`` array of an Image or array (premultiplied modes refused)."""
     if isinstance(image, Image.Image):
@@ -208,23 +169,6 @@ def _split(image: Any) -> tuple[np.ndarray, np.ndarray | None]:
     return array[..., :3], array[..., 3]
 
 
-def _alpha01(plane: Any) -> np.ndarray:
-    """Alpha in 0..1 (float32) from a uint8 plane, a 0..1 float plane, a bool mask or an RGBA frame."""
-    if isinstance(plane, Image.Image):
-        array = np.asarray(plane) if plane.mode == "L" else np.asarray(plane.convert("RGBA"))[..., 3]
-    else:
-        array = np.asarray(plane)
-        if array.ndim == 3 and array.shape[2] in (2, 4):
-            array = array[..., -1]
-    if array.ndim != 2:
-        raise ValueError(f"Expected an alpha plane or an RGBA frame; got shape {array.shape}.")
-    if array.dtype == bool:
-        return array.astype(np.float32)
-    if array.dtype == np.uint8:
-        return array.astype(np.float32) / np.float32(255.0)
-    return np.clip(array.astype(np.float32), 0.0, 1.0)
-
-
 def _mask(mask: Any, shape: tuple[int, int], name: str) -> np.ndarray | None:
     if mask is None:
         return None
@@ -243,11 +187,6 @@ def _grow(mask: np.ndarray) -> np.ndarray:
     result[1:] |= grown[:-1]
     result[:-1] |= grown[1:]
     return result
-
-
-# Distances and dilations: forge_core.distance_to(mask, cap) (Chebyshev, capped at cap + 1, uint8 here) and
-# forge_core.dilate_square(mask, radius) (clipped windows, Pillow MaxFilter(2r+1) on a mask), promoted from
-# this module's former _distance_to and _dilate with identical results (D30).
 
 
 def _box_max(image: np.ndarray, radius: int) -> np.ndarray:
@@ -327,8 +266,6 @@ def _matting_space(w_chroma: float) -> tuple[np.ndarray, np.ndarray]:
     return matrix, np.linalg.inv(matrix).astype(np.float32)
 
 
-# --------------------------------------------------------------------------- key estimation and choice
-
 def _ring_mask(height: int, width: int, ring: int) -> np.ndarray:
     mask = np.zeros((height, width), bool)
     mask[:ring] = mask[-ring:] = True
@@ -337,25 +274,10 @@ def _ring_mask(height: int, width: int, ring: int) -> np.ndarray:
 
 
 def estimate_key(rgb: Any, declared: Any = "magenta", ring: int = 8) -> tuple[np.ndarray, dict[str, Any]]:
-    """Estimate the backdrop key from the border ring (report v2 5.1; jev process-sprite.py:57-82).
+    """Estimate the key from border pixels near the declared colour.
 
-    Ring pixels within 160 of the declared key are key candidates; when they
-    are at least 12% of the ring, the key is their median, refined by the
-    median of the ring pixels within 48 of it. Generated media drift: Grok
-    JPEGs give (235, 21, 175), Codex PNGs (249, 5, 249), image-to-video frames
-    (202, 80, 177). The estimate is valid when it still leans to the declared
-    key's channels (dominance >= 60); otherwise the declared key is returned.
-
-    ``rgb`` may carry alpha (RGBA array or image). Transparent ring pixels are
-    ignored, and an image with real transparency whose key coverage is below
-    1% (or whose ring is mostly transparent) reports ``use_native_alpha``:
-    keep its own alpha instead of keying.
-
-    Returns ``(key, info)``: ``key`` is float32 ``(3,)``; ``info`` holds
-    ``key``, ``declared``, ``declared_rgb``, ``source`` (border_median,
-    declared or native_alpha), ``valid``, ``reason``, ``ring_px``,
-    ``near_share``, ``ring_share``, ``coverage``, ``distance_from_declared``,
-    ``native_alpha`` and ``use_native_alpha``.
+    Use their median when enough candidates exist and the estimate remains key-like;
+    otherwise retain the declared key. Returns the estimate and sampling diagnostics.
     """
     ring = operator.index(ring)
     if ring < 1:
@@ -422,17 +344,10 @@ def _material_share(rgb: np.ndarray, subject: np.ndarray, model: _KeyModel, min_
 
 def key_material_share(rgb: Any, key: Any = None, *, min_excess: float = 8.0,
                        subject_distance: float = 64.0) -> float:
-    """Share of the subject's deep-interior pixels whose key dominance is at least ``min_excess``.
+    """Return the share of deep-interior subject pixels dominated by the key colour.
 
-    The subject is every pixel at least ``subject_distance`` (RGB) from the
-    key, opaque pixels only when ``rgb`` has alpha; deep means more than 6 px
-    from non-subject. At or below ``KEY_MATERIAL_SHARE_MAX`` (0.5%,
-    sprite-gen's bar for --spill auto) the subject owns no key-coloured
-    material, so every key tint inside it was painted by the generator and
-    interior despill may remove it (report v2 5.1). The prototype used 120,
-    which misses purple designs 100-120 from magenta such as (180, 60, 200)
-    and would grey them; 64 still gives 0.000116 for the Ryo master.
-    ``key`` None or a name estimates the key from the border.
+    Subject pixels exceed subject_distance from the key; alpha input also excludes
+    transparent pixels. The interior is more than six pixels from non-subject pixels.
     """
     colour, alpha = _split(rgb)
     pixels = colour.astype(np.float32)
@@ -449,17 +364,8 @@ def key_material_share(rgb: Any, key: Any = None, *, min_excess: float = 8.0,
 
 def auto_interior_despill(reference: Any = None, frames: Sequence[Any] = (), *, key: Any = None,
                           sample: int = 16) -> dict[str, Any]:
-    """Decide KeyParams.interior_despill for a clip: the auto rule of report v2 5.1.
-
-    Interior despill is on only when the subject owns no key-coloured
-    material: the reference still (the approved master, when given) and the
-    median of up to ``sample`` evenly spaced frames both have a
-    key_material_share at or below ``KEY_MATERIAL_SHARE_MAX`` (0.5%). On the
-    Ryo clip the reference gives 0.000116 and the clip median 0.0024, so it
-    is on; a purple or pink costume turns it off. Returns the decision for
-    pipeline metadata: ``interior_despill``, ``reference_share``,
-    ``clip_sample_frames``, ``clip_median_share``, ``clip_max_share`` and
-    ``rule``.
+    """Enable interior despill only when the reference and sampled frames contain
+    no significant key-coloured subject material. Returns the decision and diagnostics.
     """
     if reference is None and len(frames) == 0:
         raise ValueError("auto_interior_despill needs a reference still or clip frames.")
@@ -484,7 +390,8 @@ def auto_interior_despill(reference: Any = None, frames: Sequence[Any] = (), *, 
 def _subject_pixels(master: np.ndarray, alpha: np.ndarray | None) -> np.ndarray:
     """The master's subject colours: its visible pixels, or, on an opaque master with a uniform
     border colour, the pixels more than 2 px inside that backdrop (the anti-aliased rim is a mix).
-    A master that is all backdrop counts as all subject."""
+    A master that is all backdrop counts as all subject.
+    """
     if alpha is not None and (alpha < 255).any():
         return master[alpha >= 128]
     height, width = master.shape[:2]
@@ -500,15 +407,10 @@ def _subject_pixels(master: np.ndarray, alpha: np.ndarray | None) -> np.ndarray:
 
 
 def choose_key_color(master_rgba: Any, candidates: Sequence[Any] = ("magenta", "green", "blue")) -> dict[str, Any]:
-    """Pick the chroma key that the master's own colours do not fight (Dusk prepare-actors.py L18).
+    """Choose a backdrop key that does not overlap the master's subject colours.
 
-    A candidate is rejected when more than ``KEY_MATERIAL_SHARE_MAX`` of the
-    master's subject pixels lean to it by ``OVERLAP_DOMINANCE`` (40) or more,
-    for example a purple costume (180, 60, 200) or a pink scarf against
-    magenta. The first acceptable candidate in order wins; when every
-    candidate overlaps, the least overlapping one is returned with status
-    ``conflict``. The subject is the visible pixels of an RGBA master, or the
-    pixels away from a uniform border colour of an opaque one.
+    Reject candidates exceeding KEY_MATERIAL_SHARE_MAX at OVERLAP_DOMINANCE.
+    Returns the chosen key and per-candidate diagnostics.
     """
     colour, alpha = _split(master_rgba)
     subject = _subject_pixels(colour, alpha).astype(np.float32)
@@ -545,16 +447,11 @@ def choose_key_color(master_rgba: Any, candidates: Sequence[Any] = ("magenta", "
     }
 
 
-# --------------------------------------------------------------------------- legacy keyers (bit-exact)
-
 def legacy_hard_key(rgba: Any, threshold: float = 100, edge_threshold: float = 150) -> Image.Image:
-    """Vectorised, bit-identical ``generate2dsprite.remove_bg_magenta`` (cfed170 L426-471).
+    """Binary magenta keying with separate global and border-connected thresholds.
 
-    Visible pixels closer than ``threshold`` to #FF00FF are cleared anywhere;
-    then pixels closer than ``edge_threshold`` are cleared where they connect
-    to the canvas border through transparent or cleared pixels (8-connected).
-    Cleared pixels become (0, 0, 0, 0); RGB already hidden under alpha 0 is
-    kept. Unlike the original, the input is never modified.
+    Pixels within threshold are cleared globally; edge_threshold applies only to
+    pixels connected to the border through key-like pixels.
     """
     pixels = _rgba(rgba)
     channels = pixels[..., :3].astype(np.int32)
@@ -571,12 +468,9 @@ _LEGACY_MAGENTA = np.array([255, 0, 255], dtype=np.float32)
 
 
 def legacy_border_flood_key(rgba: Any, dist: float = 55.0, despill: float = 0.0) -> Image.Image:
-    """Vectorised, bit-identical ``video2dsprite.chroma_key_rgba`` (cfed170 L103-173).
+    """Clear border-connected magenta-like pixels and apply optional edge despill.
 
-    Magenta-ish pixels (RGB distance <= ``dist`` or bright pink) 4-connected to
-    the canvas border become transparent; enclosed key holes stay opaque
-    (remove them with remove_enclosed_pockets). ``despill`` (0..1) subtracts
-    that share of the excess from the first visible ring where it exceeds 20.
+    Enclosed key-coloured holes remain opaque; remove_enclosed_pockets handles them.
     """
     if not math.isfinite(despill) or not 0 <= despill <= 1:
         raise ValueError("despill must be between 0 and 1")
@@ -611,8 +505,6 @@ def legacy_border_flood_key(rgba: Any, dist: float = 55.0, despill: float = 0.0)
     return Image.fromarray(out, "RGBA")
 
 
-# --------------------------------------------------------------------------- mattes
-
 def _local_key(pixels: np.ndarray, background: np.ndarray, key: np.ndarray, radius: int) -> np.ndarray:
     """B(x): mean colour of the background pixels within ``radius`` (Chebyshev); ``key`` where there are none."""
     count = _box_sum(background.astype(np.float64), radius)  # float64 input: exact whole-frame sums
@@ -646,7 +538,7 @@ def _finish(alpha: np.ndarray, colour: np.ndarray, native: np.ndarray | None) ->
 def soft_matte(rgb: Any, params: KeyParams = KeyParams(), key: Any = None, *,
                local_background: bool | int = False, protect: Any = None,
                return_debug: bool = False) -> np.ndarray | tuple[np.ndarray, dict[str, Any]]:
-    """Known-key soft matte of a flat chroma backdrop (frozen v13; report v2 P0-1, P0-2).
+    """Known-key soft matte of a flat chroma backdrop.
 
     Model: each observed pixel is ``C = a*F + (1-a)*K`` of a subject colour F
     and the known key K. Decoded H.264/VP9 frames are 4:2:0 and the encoder
@@ -656,7 +548,7 @@ def soft_matte(rgb: Any, params: KeyParams = KeyParams(), key: Any = None, *,
 
     1. background: ``|S(C)-S(K)| <= t_bg``, or a strongly key-leaning pixel
        still within ``t_fg`` (haze, glow and blur painted into the backdrop).
-       Enclosed key holes are background too (report v2 P0-1).
+       Enclosed key holes are background too.
     2. alpha zone: non-background pixels within ``r_a`` px of background, plus
        any within ``t_fg`` of K. Alpha is the projection onto line-consistent
        candidates farther from the background (soft-min over ``radius`` px);
@@ -672,12 +564,10 @@ def soft_matte(rgb: Any, params: KeyParams = KeyParams(), key: Any = None, *,
 
     ``key``: None or a declared name estimates it from the border ring
     (estimate_key); ``#rrggbb`` or an RGB triple is used as given. With a
-    magenta key and ``local_background`` off the output equals the frozen
-    prototype bit for bit. ``local_background`` (True = 12 px, or a radius)
-    re-mattes against B(x), the mean of the background within that radius
-    (report v2 P2-1): edges over a drifting or vignetted backdrop un-mix 2-4x
-    closer to the subject colour; a narrow gap filled with bright glow is not
-    helped, since B(x) comes from the plain backdrop around it. ``protect`` (a
+    ``local_background`` value (True = 12 px, or a radius), re-matte against
+    B(x), the mean background colour within that radius. This adapts edge
+    un-mixing to a drifting or vignetted backdrop, but not bright glow in
+    narrow gaps because B(x) samples the surrounding backdrop. ``protect`` (a
     boolean mask, see protect_mask) marks design pixels that are never
     background, zone or despill pixels; they stay opaque and serve as
     candidates. Light purples within ``t_fg`` of magenta at the video weight,
@@ -726,7 +616,6 @@ def soft_matte(rgb: Any, params: KeyParams = KeyParams(), key: Any = None, *,
     alpha = (~bg).astype(np.float32)
     out = C.copy()
 
-    # ---- alpha zone: most-extreme line-consistent candidate farther from the background ----
     ys, xs = np.nonzero(zone_a)
     n = len(ys)
     SKu = SK if SKmap is None else SKmap[ys, xs]
@@ -787,7 +676,6 @@ def soft_matte(rgb: Any, params: KeyParams = KeyParams(), key: Any = None, *,
     Yo = np.clip(SF[:, 0] + s * (Yu - SF[:, 0]), 0.0, 255.0)
     out[ys, xs] = np.clip(np.stack([Yo, SF[:, 1], SF[:, 2]], -1) @ Minv.T, 0.0, 255.0)
 
-    # ---- colour-clean band: key excess <= local deep-interior excess + slack ----
     deep = (~bg) & (dist > p.r_c)
     num = _box_sum(np.where(deep, np.maximum(m_C, 0.0), 0.0).astype(np.float32), p.ref_r)
     den = _box_sum(deep.astype(np.float32), p.ref_r)
@@ -800,7 +688,6 @@ def soft_matte(rgb: Any, params: KeyParams = KeyParams(), key: Any = None, *,
         zone_c &= ~guard
     out = _clamp_excess(out, lim, zone_c, model)
 
-    # ---- hysteresis speck removal ----
     if p.speck_steps > 0:
         keep = alpha >= 0.5
         pos = alpha > 0
@@ -817,7 +704,7 @@ def soft_matte(rgb: Any, params: KeyParams = KeyParams(), key: Any = None, *,
     return rgba
 
 
-# Region matting (D15; B01's _local_soft_matte_regions, promoted with an exactness guard).
+# Region matting falls back to a whole-sheet pass when crops cannot preserve exact sums.
 _REGION_TILE = 16              # px: content is found on this tile grid
 _REGION_MARGIN = 32            # px of context around each group of content tiles
 _REGION_MAX_GROUPS = 64        # more groups (a noisy backdrop) cost more in per-call overhead than they save
@@ -866,7 +753,7 @@ def _float32_sums_exact(colour: np.ndarray, content: np.ndarray, model: _KeyMode
 
 
 def soft_matte_regions(rgb: Any, params: KeyParams = KeyParams(), key: Any = None) -> np.ndarray:
-    """``soft_matte(rgb, params, key)``, byte for byte, matting only the parts of a sheet that hold content (D15).
+    """``soft_matte(rgb, params, key)``, byte for byte, matting only the parts of a sheet that hold content.
 
     A pixel within ``t_bg / ||M||_F`` (RGB distance) of the key, or with
     alpha 0, always comes out (0, 0, 0, 0), and every soft-matte step is
@@ -933,16 +820,10 @@ def soft_matte_regions(rgb: Any, params: KeyParams = KeyParams(), key: Any = Non
 
 def dominance_matte(rgb: Any, key: Any = "magenta", lo: float = 20.0, hi: float = 140.0, *,
                     protect: Any = None) -> np.ndarray:
-    """Fast dominance key of the Dusk Crossing production clips (process-clips.py L15-29).
+    """Compute soft alpha from key-channel dominance.
 
-    ``dom`` is the key dominance (magenta ``min(R, B) - G``, green
-    ``G - max(R, B)``, blue ``B - max(R, G)``); ``alpha = clip((hi - dom) /
-    (hi - lo))``. Pure key (key channels > 145, others < 30) gets a hard 0,
-    and every pixel with alpha < 0.995 loses its key excess ``max(0, dom)``.
-    Every subject colour with dominance above ``lo`` turns partly transparent,
-    so use soft_matte for subjects that own key-coloured material. A key that
-    is not a declared name only selects its channel pattern. ``protect`` pixels
-    stay opaque and untouched. Alpha uses NumPy's rint, as in the source.
+    Alpha is clip((hi - dominance) / (hi - lo)); pure-key pixels are cleared.
+    Optional spill repair changes visible RGB without adding coverage.
     """
     if not hi > lo:
         raise ValueError("dominance_matte needs hi > lo.")
@@ -972,7 +853,8 @@ def dominance_matte(rgb: Any, key: Any = "magenta", lo: float = 20.0, hi: float 
 
 def _key_pockets(rgba: np.ndarray, key_rgb: np.ndarray, min_area: int, max_dist: float) -> tuple[np.ndarray, int]:
     """Visible key-coloured regions: 8-connected pixels within ``2 * max_dist`` of the key that hold
-    at least ``min_area`` pixels within ``max_dist`` (so codec noise inside a hole goes with it)."""
+    at least ``min_area`` pixels within ``max_dist`` (so codec noise inside a hole goes with it).
+    """
     visible = rgba[..., 3] > 0
     distance = np.sqrt(((rgba[..., :3].astype(np.float32) - key_rgb) ** 2).sum(-1))
     loose = visible & (distance <= 2 * max_dist)
@@ -992,8 +874,7 @@ def remove_enclosed_pockets(rgba: Any, key: Any, min_area: int = 16,
     A pocket is an 8-connected region of visible pixels within ``2 * max_dist``
     (RGB) of ``key`` holding at least ``min_area`` pixels within ``max_dist``;
     it becomes (0, 0, 0, 0). Pass the key the matte used (estimate_key); a
-    name means the declared colour. 16 of 145 Ryo frames shipped such pockets
-    (report v2 P0-1). Returns ``(rgba, pockets_removed)``.
+    name means the declared colour. Returns ``(rgba, pockets_removed)``.
     """
     pixels = _rgba(rgba)
     pockets, count = _key_pockets(pixels, _key_rgb(key), operator.index(min_area), float(max_dist))
@@ -1001,11 +882,9 @@ def remove_enclosed_pockets(rgba: Any, key: Any, min_area: int = 16,
     return pixels, count
 
 
-# --------------------------------------------------------------------------- despill and colour repair
-
 def despill(rgba: Any, mode: str = "edge", radius: int = 1, margin: int = 12, protect: Any = None, *,
             key: Any = "magenta") -> tuple[np.ndarray, dict[str, Any]]:
-    """Remove key spill from visible pixels; alpha never changes (S24, MAP-03).
+    """Remove key spill from visible pixels; alpha never changes.
 
     Where a pixel's key dominance exceeds ``margin`` it is subtracted from the
     key channels (magenta: R and B), leaving a neutral colour. ``edge`` treats
@@ -1056,24 +935,6 @@ def despill(rgba: Any, mode: str = "edge", radius: int = 1, margin: int = 12, pr
     return pixels, report
 
 
-def unmix(rgb: Any, alpha: Any, key: Any) -> np.ndarray:
-    """Recover the subject colour ``F = (C - (1 - a) K) / a`` of key-mixed pixels (report v2 5.2).
-
-    ``alpha`` is a uint8 plane or 0..1 floats; pixels with alpha below 1/255
-    become 0. Returns uint8 RGB (half-up rounding, clipped to 0..255).
-    """
-    colour, _ = _split(rgb)
-    a = _alpha01(alpha)
-    if a.shape != colour.shape[:2]:
-        raise ValueError(f"Alpha shape {a.shape} does not match the image {colour.shape[:2]}.")
-    key_rgb = _key_rgb(key)
-    a3 = a[..., None]
-    with np.errstate(divide="ignore", invalid="ignore"):
-        subject = (colour.astype(np.float32) - (1.0 - a3) * key_rgb) / a3
-    subject = np.where(a3 >= 1.0 / 255.0, subject, 0.0)
-    return np.clip(np.floor(subject + 0.5), 0, 255).astype(np.uint8)
-
-
 def _parse_colours(colors: Any) -> np.ndarray:
     if isinstance(colors, str) or (len(colors) == 3 and all(
             isinstance(v, (int, float, np.integer, np.floating)) for v in colors)):
@@ -1086,7 +947,7 @@ def protect_mask(rgb: Any, colors: Any, tol: float = 0.03) -> np.ndarray:
 
     Pass the mask as ``protect=`` to soft_matte, dominance_matte or despill so
     a design colour near the key (for example #972fbf against magenta) is
-    never keyed or despilled (game-opus55 masa_dragon_rekey.py L196-221).
+    never keyed or despilled.
     """
     colour, _ = _split(rgb)
     palette = _to_oklab(_parse_colours(colors))
@@ -1176,149 +1037,14 @@ def protect_design_colours(rgb: Any, key: Any, *, params: KeyParams = KeyParams(
     return pixels, report
 
 
-def complement_cleanup(rgba: Any, hue_band: tuple[int, int] = (32, 120), *, min_saturation: int = 54,
-                       min_alpha: int = 8, strength: float = 0.94,
-                       tint: tuple[float, float, float] = (1.035, 0.998, 0.93)) -> tuple[np.ndarray, int]:
-    """Opt-in: neutralise codec chroma complements (green next to a magenta key); alpha unchanged.
-
-    Visible pixels (alpha > ``min_alpha``) with Pillow HSV saturation above
-    ``min_saturation`` and hue inside ``hue_band`` (0-255 scale, inclusive;
-    lo > hi wraps) are blended ``strength`` of the way to a warm grey of the
-    same BT.601 luma (``tint`` per channel). The default band is yellow-green
-    to cyan, the complement of magenta (hd2d warehouse CHARACTER-QA.md:31,
-    policy warehouse-chroma-v3). Use it only when the subject owns no colours
-    in the band. Returns ``(rgba, changed_px)``.
-    """
-    pixels = _rgba(rgba)
-    lo, hi = (int(v) for v in hue_band)
-    hsv = np.asarray(Image.fromarray(np.ascontiguousarray(pixels[..., :3]), "RGB").convert("HSV"))
-    hue, saturation = hsv[..., 0], hsv[..., 1]
-    in_band = (hue >= lo) & (hue <= hi) if lo <= hi else (hue >= lo) | (hue <= hi)
-    spill = (pixels[..., 3] > min_alpha) & (saturation > min_saturation) & in_band
-    if spill.any():
-        colour = pixels[..., :3].astype(np.float32)
-        luma = colour[..., 0] * _LUMA[0] + colour[..., 1] * _LUMA[1] + colour[..., 2] * _LUMA[2]
-        warm = np.stack([luma * tint[0], luma * tint[1], luma * tint[2]], axis=-1)
-        colour[spill] = colour[spill] * (1.0 - strength) + warm[spill] * strength
-        pixels[..., :3] = np.clip(colour, 0, 255).astype(np.uint8)
-    return pixels, int(spill.sum())
-
-
-# --------------------------------------------------------------------------- temporal stability
-
-def _hysteresis_pass(alphas: list[np.ndarray], lo: float, hi: float, max_step: float, levels: int,
-                     previous: np.ndarray, state: np.ndarray) -> tuple[list[np.ndarray], np.ndarray]:
-    """One causal pass; with ``levels`` (255 for 8-bit output) results stay on that grid."""
-    out = []
-    for alpha in alphas:
-        decided = np.where(alpha >= hi, True, np.where(alpha <= lo, False, state))
-        held = np.clip(alpha, previous - max_step, previous + max_step)
-        result = np.where(decided == state, held, alpha)
-        result = np.where(alpha == 0, 0.0, result).astype(np.float32)  # never invent coverage without colour
-        if levels:
-            result = (np.floor(result * levels + 0.5) / levels).astype(np.float32)
-        out.append(result)
-        previous, state = result, decided
-    return out, state
-
-
-def temporal_alpha_hysteresis(alphas: Sequence[Any], band: tuple[float, float] = (0.4, 0.6),
-                              loop: bool = False, *, max_step: float = 0.25) -> list[np.ndarray]:
-    """Damp matte flicker across a clip with a coverage hysteresis (report v2 P2-1).
-
-    Each pixel has a coverage state, opaque or transparent; it changes only
-    when alpha leaves the ambiguous ``band`` on the other side (a Schmitt
-    trigger, as in game-opus55 quantize_seq). While the state holds, alpha
-    may move at most ``max_step`` per frame; a decisive change passes at once,
-    and alpha 0 always passes (there is no colour to show). On the Ryo clip
-    (frames 57-87, soft matte with auto despill) this takes report v2's flips
-    per frame pair from 9.6 to 3.5 with fringe and leak still 0; alpha lags
-    in-band changes by up to a frame (key-hued opaque pixels 173 -> 196 per
-    frame, luma re-explanation error 2.82 -> 3.27). Static clips come back
-    unchanged. With
-    ``loop`` the filter runs twice so frame 0 continues from the last frame.
-
-    ``alphas`` are uint8 planes, 0..1 float planes or RGBA frames; the result
-    has the same form (uint8 rounded half-up; RGBA frames keep their RGB).
-    """
-    lo, hi = float(band[0]), float(band[1])
-    if not 0.0 <= lo < hi <= 1.0 or not max_step > 0:
-        raise ValueError("band needs 0 <= lo < hi <= 1 and max_step > 0.")
-    if len(alphas) == 0:
-        return []
-    planes = [_alpha01(frame) for frame in alphas]
-    if any(plane.shape != planes[0].shape for plane in planes):
-        raise ValueError("All frames must have the same size.")
-    first_source = np.asarray(alphas[0])
-    eight_bit = isinstance(alphas[0], Image.Image) or first_source.dtype == np.uint8
-    levels = 255 if eight_bit else 0
-    if levels:  # a held step must stay within max_step after rounding to the 8-bit grid
-        max_step = math.floor(max_step * levels + 1e-6) / levels
-    first = planes[0]
-    state = first >= 0.5
-    if loop and len(planes) > 1:
-        warm, state = _hysteresis_pass(planes, lo, hi, max_step, levels, first, state)
-        filtered, _ = _hysteresis_pass(planes, lo, hi, max_step, levels, warm[-1], state)
-    else:
-        filtered, _ = _hysteresis_pass(planes[1:], lo, hi, max_step, levels, first, state)
-        filtered.insert(0, first.copy())
-    results = []
-    for source, plane in zip(alphas, filtered):
-        array = np.asarray(source)
-        if isinstance(source, Image.Image) or (array.ndim == 3 and array.shape[2] in (2, 4)):
-            frame = _rgba(source)
-            frame[..., 3] = np.floor(plane * 255.0 + 0.5).astype(np.uint8)
-            frame[frame[..., 3] == 0, :3] = 0
-            results.append(frame)
-        elif array.dtype == np.uint8:
-            results.append(np.floor(plane * 255.0 + 0.5).astype(np.uint8))
-        elif array.dtype == bool:
-            results.append(plane >= 0.5)
-        else:
-            results.append(plane)
-    return results
-
-
-def flip_count(frames: Sequence[Any], *, delta: float = 0.25, raw: Sequence[Any] | None = None,
-               raw_tolerance: int = 20) -> float:
-    """Matte flips per consecutive frame pair: pixels whose alpha changes by more than ``delta``.
-
-    ``frames`` are RGBA frames or alpha planes (uint8 or 0..1 floats). With
-    ``raw`` (the source frames, same count), only pixels whose source colour
-    changed by at most ``raw_tolerance`` (max channel) count, so real motion
-    is excluded: this is report v2's flip metric, which also restricts the
-    count to a raw-derived edge band (cfed170 video 20.4, frozen v13 9.6,
-    sprite-gen best 1.1 per pair on Ryo frames 57-87).
-    """
-    planes = [_alpha01(frame) for frame in frames]
-    if len(planes) < 2:
-        raise ValueError("flip_count needs at least two frames.")
-    if any(plane.shape != planes[0].shape for plane in planes):
-        raise ValueError("All frames must have the same size.")
-    sources = None
-    if raw is not None:
-        sources = [_split(frame)[0].astype(np.int16) for frame in raw]
-        if len(sources) != len(planes) or any(source.shape[:2] != planes[0].shape for source in sources):
-            raise ValueError("raw needs one source frame of the same size per keyed frame.")
-    counts = []
-    for index in range(1, len(planes)):
-        changed = np.abs(planes[index] - planes[index - 1]) > delta
-        if sources is not None:
-            changed &= np.abs(sources[index] - sources[index - 1]).max(-1) <= raw_tolerance
-        counts.append(int(changed.sum()))
-    return float(np.mean(counts))
-
-
-# --------------------------------------------------------------------------- QA and convenience
-
 def matte_qa(rgba: Any, key: Any, *, key_tolerance: float = KEY_TOLERANCE, spill_threshold: float = 20.0,
              min_pocket_area: int = 16) -> dict[str, Any]:
-    """Key-residue metrics of a keyed RGBA image (report v2 P0-3), for gates and matte_report.v1.
+    """Key-residue metrics of a keyed RGBA image, for gates and matte_report.v1.
 
     ``opaque_key_px``: pixels with alpha >= 128 within ``key_tolerance`` (RGB)
     of the key. ``outer_ring_spill_fraction``: share of the outer visible ring
     (visible pixels with a transparent or off-canvas 4-neighbour) whose
-    straight colour has key dominance above ``spill_threshold`` (cfed170 video:
+    straight colour has key dominance above ``spill_threshold`` (legacy binary keyer:
     about 0.70; target <= 0.01). ``semitransparent_fraction``: share of visible
     pixels with 0 < alpha < 255. ``enclosed_key_pockets``: visible key-coloured
     regions of at least ``min_pocket_area`` px (remove_enclosed_pockets rule,
@@ -1367,9 +1093,9 @@ def matte_qa(rgba: Any, key: Any, *, key_tolerance: float = KEY_TOLERANCE, spill
 
 def key_still(rgba: Any, quality: str = "auto", key: Any = "auto", resampler_hint: str = "lanczos", *,
               threshold: float = 100, edge_threshold: float = 150) -> tuple[Image.Image, dict[str, Any]]:
-    """Key a generated still (sprite sheet, prop pack, master) in one call (report v2 P2-2, S24).
+    """Key a generated still (sprite sheet, prop pack, master) in one call.
 
-    ``quality``: ``hard`` is legacy_hard_key (binary alpha, the cfed170 sprite
+    ``quality``: ``hard`` is legacy_hard_key (binary alpha, the legacy sprite
     keyer; magenta-family keys only) with its #FF00FF distances ``threshold``
     and ``edge_threshold`` (keyword-only, default 100 and 150, recorded in
     ``info["thresholds"]``); ``soft`` is soft_matte with ``STILL_KEY_PARAMS``

@@ -1,4 +1,3 @@
-"""Coarsely sampled real motion must not be classified static by a step ratio."""
 import sys,unittest,tempfile
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'skills/comfyui-forge-video2dsprite/scripts'))

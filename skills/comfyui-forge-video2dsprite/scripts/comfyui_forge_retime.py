@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Retime one reviewed motion candidate with explicit keys, holds and events.
-
---kind is cycle, oneshot-return or oneshot-hold. Motion labels never choose
-phase fractions, durations or landmarks. --auto-oneshot uses --range and the
-confirmed --duration in ms, keeps candidate endpoints, removes redundant
-interior static frames and pins explicit --key NAME=SOURCE@PHASE[+HOLDms].
-Equal adjacent poses merge into longer durations. --event-source maps reviewed
-source events through the same warp. Continuous motion may use authored
---selection/--range with --duration or --ticks. Playback stays forward.
-"""
+"""Retime one reviewed motion candidate with explicit keys, holds and events."""
 from __future__ import annotations
 
 import comfyui_forge_contracts
@@ -30,7 +21,7 @@ if str(_HERE) not in sys.path:
 import comfyui_forge_core  # noqa: E402  (this skill's vendored copy)
 import comfyui_forge_gait_loop  # noqa: E402  (selection I/O and frame statistics)
 
-RETIME_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION  # QA envelopes record the package version (D29)
+RETIME_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION
 from comfyui_forge_motion_contract import TYPES
 GAIT_KINDS = ('cycle',)
 AMBIENT_KINDS = ()
@@ -44,8 +35,6 @@ AUTO_ACTIVE = 0.20          # ... and below this share of the clip's 90th-percen
 AUTO_SETTLE = 0.15          # the settle: the pose stays within 15% of its largest excursion from the first frame
 AUTO_HOLD_KEEP = 2          # source frames kept of every static hold inside the action (a beat; the rest is cut)
 
-
-# --------------------------------------------------------------------------- frame choice
 
 def parse_spans(text: str, count: int) -> list[int]:
     """Exact source indices from a spans string (see the module help)."""
@@ -92,15 +81,10 @@ def sample_range(start: int, end: int, count: int | None) -> list[int]:
     return [start + comfyui_forge_gait_loop.round_half_up(Fraction(k * (frames - 1), count - 1)) for k in range(count)]
 
 
-
-
-
-
-# --------------------------------------------------------------------------- timing
-
 def scaled_edges(weights: Sequence[int], total: int) -> list[int]:
     """Cumulative edges for ``total`` split in proportion to ``weights`` (half-up rounding,
-    exact sum; equal weights give forge_core.frame_durations)."""
+    exact sum; equal weights give forge_core.frame_durations).
+    """
     cumulative = np.concatenate([[0], np.cumsum(weights)]).astype(object)
     whole = int(cumulative[-1])
     return [(2 * int(c) * total + whole) // (2 * whole) for c in cumulative]
@@ -122,7 +106,8 @@ def tick_durations(ticks: Sequence[int], hz: int) -> tuple[list[int], list[int]]
 
 def parse_ticks(text: str, frames: int, weights: Sequence[int]) -> list[int]:
     """--ticks N (split over the frames in proportion to their current durations) or one
-    tick count per frame."""
+    tick count per frame.
+    """
     try:
         values = [int(v) for v in str(text).split(",")]
     except ValueError:
@@ -140,10 +125,6 @@ def frame_starts(durations: Sequence[int]) -> list[int]:
     return np.concatenate([[0], np.cumsum(durations)]).astype(int).tolist()
 
 
-
-
-# --------------------------------------------------------------------------- policy rules
-
 def check_policy(kind: str, policy: str, indices: Sequence[int]) -> list[str]:
     """Raise for the two loop rules; return the rules that were applied."""
     if policy == 'pingpong':
@@ -154,8 +135,6 @@ def check_policy(kind: str, policy: str, indices: Sequence[int]) -> list[str]:
     if kind != 'cycle' and policy != 'oneshot': raise ValueError('one-shot motion is not continuous even when its poses match')
     return ['one selected candidate, forward playback', 'ending follows its motion contract']
 
-
-# --------------------------------------------------------------------------- authored events
 
 def parse_event(text: str, tick_mode: bool) -> dict:
     """NAME@MS, or NAME@Nt (ticks) in tick mode."""
@@ -190,12 +169,11 @@ def _frame_at(edges: Sequence[int], value: int) -> int:
     return min(len(edges) - 2, bisect.bisect_right(edges, value) - 1)
 
 
-# --------------------------------------------------------------------------- automatic one-shot retiming
-
 def tick_grid(rate: Fraction) -> tuple[int, int]:
     """(tick Hz, ticks per frame) of an output frame rate: the 60 Hz grid when a frame is a whole number
     of 60 Hz ticks (12, 15, 20, 30, 60 fps), else the rate's own fraction (24 fps: 24 Hz x 1; 12.5 fps:
-    25 Hz x 2, which is exactly 80 ms)."""
+    25 Hz x 2, which is exactly 80 ms).
+    """
     rate = Fraction(rate)
     if rate <= 0:
         raise ValueError("the output frame rate must be positive")
@@ -228,7 +206,8 @@ def parse_event_source(text: str) -> tuple[str, int]:
 def motion_profile(clip: comfyui_forge_gait_loop.Clip, start: int, end: int) -> dict:
     """Motion energy of [start, end): ``steps[i]`` is the mean absolute change (0-255, premultiplied RGBA on
     the clip's reduced copies, cropped to the frames' union) into frame start+i (steps[0] = 0), ``pose[i]``
-    the same against frame ``start``."""
+    the same against frame ``start``.
+    """
     if clip.reduced is None:
         raise ValueError("motion_profile needs load_clip(..., keep_reduced=True)")
     f = clip.reduction
@@ -254,7 +233,8 @@ def detect_phases(steps: np.ndarray, pose: np.ndarray) -> dict:
     the 90th-percentile step). The onset is the first moving frame; the settle is the later of the last
     moving frame and the first frame from which the pose stays within AUTO_SETTLE of its largest excursion
     (back at rest). Holds are the runs of still frames between the onset and the settle (a held strike or
-    hunch: the generator's slow drift and its duplicated frames stay under the moving threshold)."""
+    hunch: the generator's slow drift and its duplicated frames stay under the moving threshold).
+    """
     count = len(steps)
     padded = np.concatenate([[steps[min(1, count - 1)]], steps, [steps[-1]]])
     smooth = (padded[:-2] + padded[1:-1] + padded[2:]) / 3.0
@@ -291,7 +271,8 @@ def auto_oneshot(steps: np.ndarray, pose: np.ndarray, start: int, *, duration_ms
     """The played source frames, ticks and events of an automatically retimed one-shot.
 
     ``steps``/``pose`` cover source frames start, start+1, ...; ``keys`` hold absolute source frames.
-    The output starts on the frame before the onset (the rest pose) and ends on the settle frame."""
+    The output starts on the frame before the onset (the rest pose) and ends on the settle frame.
+    """
     from comfyui_forge_motion_contract import validate_timing
     if len(steps)!=len(pose) or len(steps)<2:raise ValueError('motion profile needs matching arrays with at least two frames')
     if len({key.get('name') for key in keys})!=len(keys):raise ValueError('key names must be unique')
@@ -382,8 +363,6 @@ def auto_oneshot(steps: np.ndarray, pose: np.ndarray, start: int, *, duration_ms
             "info": info}
 
 
-# --------------------------------------------------------------------------- command
-
 def choose_frames(args: argparse.Namespace, clip: comfyui_forge_gait_loop.Clip, fps: Fraction) -> dict:
     """The played source frames from exactly one of --selection, --spans or --range."""
     count = clip.count
@@ -411,7 +390,8 @@ def choose_frames(args: argparse.Namespace, clip: comfyui_forge_gait_loop.Clip, 
 
 def timing(args: argparse.Namespace, kind: str, chosen: dict, fps: Fraction) -> dict:
     """Integer durations from one of --ticks, --stride/--speed or --duration; else the
-    selection's durations or source timing. Uneven input durations keep their proportions."""
+    selection's durations or source timing. Uneven input durations keep their proportions.
+    """
     n = len(chosen["indices"])
     base = chosen["weights"] or [1] * n
     flags = [flag for flag, value in (("--duration-ms", args.duration),
@@ -461,7 +441,8 @@ def timing(args: argparse.Namespace, kind: str, chosen: dict, fps: Fraction) -> 
 
 def build_events(args: argparse.Namespace, timeline: dict) -> list[dict]:
     """Explicit authored events; tick mode adds timeline boundaries (in and end);
-    plus every --event. Sorted by time."""
+    plus every --event. Sorted by time.
+    """
     edges, starts = timeline["tick_edges"], timeline["starts"]
     events = []
     if edges is not None:
@@ -676,8 +657,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2; refused input and policy violations exit 1 with ``error: ...``; anything
-    unexpected prints ``error: internal error (...)`` (D26, D27; forge_core.run_cli)."""
     return comfyui_forge_core.run_cli(_run, argv)
 
 

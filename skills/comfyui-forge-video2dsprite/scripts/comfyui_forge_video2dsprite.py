@@ -16,7 +16,7 @@ run and its QA succeed, so a failed run leaves nothing behind.
 
 Keying defaults to the soft matte with enclosed-pocket removal, auto despill
 and alpha hysteresis; ``--matte binary --despill-mode off`` reproduces the
-cfed170 keyer bit for bit (references/matte.md). Frames are decoded, estimated
+legacy binary keyer (references/matte.md). Frames are decoded, estimated
 and matted on up to four threads (``--workers``); the output bytes do not depend
 on the thread count.
 
@@ -53,7 +53,7 @@ import comfyui_forge_av as fa  # noqa: E402  (this skill's vendored copies; neve
 import comfyui_forge_core as fc  # noqa: E402
 import comfyui_forge_matte as fm  # noqa: E402
 
-TOOL_VERSION = fc.FORGE_PACKAGE_VERSION  # QA envelopes record the package version (D29)
+TOOL_VERSION = fc.FORGE_PACKAGE_VERSION
 RAW_DIR, CLEAN_DIR = "frames-raw", "frames-clean"
 PIPELINE_META, MATTE_REPORT = "pipeline-meta.json", "matte-report.json"
 TRIAGE_REPORT, TRIAGE_SHEET = "raw-triage.json", "triage-sheet.png"
@@ -67,12 +67,12 @@ POCKET_MODES = ("auto", "remove", "keep")
 TEMPORAL_MODES = ("auto", "off", "alpha")
 DECODERS = ("default", "libvpx-vp9")
 
-RING_SPILL_MAX = 0.01          # residue gate: outer-ring key share (report v2 P0-3; Forge cfed170 measured 0.70)
-FLIPS_REFERENCE = 5.7          # sprite-gen default on the Ryo clip (report v2 table 4-B); one clip, so warn only
+RING_SPILL_MAX = 0.01          # Residue gate: key-coloured share of the outer ring.
+FLIPS_REFERENCE = 5.7          # Key-colour shift warning threshold.
 HYSTERESIS_BAND = (0.4, 0.6)
 HYSTERESIS_MAX_STEP = 0.25
 MAX_ERODE = 16
-BORDER_MIN_PX = 4              # triage: subject pixels on the ring that flag a frame (Dusk qa-review-raw.py: > 3)
+BORDER_MIN_PX = 4              # Minimum subject pixels on the border ring to flag a frame.
 TRIAGE_THUMBS = 12
 KEY_PLAN_CANDIDATES = ("magenta", "green", "blue")
 KEY_WORKERS_MAX = 4               # threads that decode, estimate and matte frames (--workers)
@@ -150,12 +150,13 @@ class _FrameSequence(SequenceABC):
 
 
 class FrameInputError(RuntimeError):
-    """A refused frame input (no frames found or decoded); a RuntimeError as in cfed170, reported as error: ..."""
+    """Invalid frame input, including missing or undecodable frames."""
 
 
 def frame_workers(requested: int | None, size: tuple[int, int], count: int) -> int:
     """Threads for the per-frame work: ``requested`` (0 or None: min(4, CPUs)), at most one per frame and no
-    more than PARALLEL_MATTE_BUDGET_MPX megapixels of frames matted at once (4K frames key one at a time)."""
+    more than PARALLEL_MATTE_BUDGET_MPX megapixels of frames matted at once (4K frames key one at a time).
+    """
     cap = requested if requested else min(KEY_WORKERS_MAX, os.cpu_count() or 1)
     megapixels = max(size[0] * size[1] / 1e6, 1e-6)
     return max(1, min(int(cap), int(PARALLEL_MATTE_BUDGET_MPX // megapixels), count))
@@ -191,8 +192,6 @@ def _frame_size(path: Path) -> tuple[int, int]:
         return image.size
 
 
-# --------------------------------------------------------------------------- extraction
-
 def extract_frames(video: Path, out_dir: Path, fps: float | str = 0.0, start: float = 0.0,
                    duration: float | None = None, decoder: str = "default", *,
                    alpha: str = "auto") -> list[Path]:
@@ -201,7 +200,7 @@ def extract_frames(video: Path, out_dir: Path, fps: float | str = 0.0, start: fl
     ``fps`` 0 keeps every source frame with its own timing; otherwise a number
     or "num/den". ``start``/``duration`` keep the frames timed in [start,
     start + duration) seconds (input-side seek). ``alpha`` auto keeps WebM
-    alpha by decoding it with libvpx; ``decoder="libvpx-vp9"`` is the cfed170
+    alpha by decoding it with libvpx; ``decoder="libvpx-vp9"`` is the legacy
     spelling of that. Frames an earlier run left in ``out_dir`` are removed.
     """
     video, out_dir = Path(video), Path(out_dir)
@@ -216,20 +215,6 @@ def extract_frames(video: Path, out_dir: Path, fps: float | str = 0.0, start: fl
         old.unlink()
     return fa.extract_frames(video, out_dir, fps=fps, start=start, duration=duration, alpha=alpha)
 
-
-# --------------------------------------------------------------------------- legacy keyer
-
-def chroma_key_rgba(im: Image.Image, dist: float = 55.0, despill: float = 0.0) -> Image.Image:
-    """The cfed170 video keyer (``--matte binary``): forge_matte.legacy_border_flood_key, bit for bit.
-
-    Magenta-ish pixels 4-connected to the canvas border become transparent;
-    enclosed key holes stay opaque (``--pockets remove`` clears them).
-    ``despill`` (0..1) corrects the first visible ring.
-    """
-    return fm.legacy_border_flood_key(im, dist, despill)
-
-
-# --------------------------------------------------------------------------- registration
 
 def content_bbox(im: Image.Image, alpha_min: int = 32) -> tuple[int, int, int, int] | None:
     arr = np.array(im.convert("RGBA"))
@@ -312,8 +297,6 @@ def fixed_envelope(sprites: Sequence[Image.Image], cell: int, body_height: int,
                     "outputOffset": [x, y], "outputSize": [cell, cell]}
 
 
-# --------------------------------------------------------------------------- matte settings
-
 def _normalise_key(value: Any) -> str:
     """``auto``, a declared key name or ``#rrggbb`` (lower case); an RGB triple becomes ``#rrggbb``."""
     if isinstance(value, (list, tuple)):
@@ -363,7 +346,7 @@ class MatteSettings(NamedTuple):
 
     @classmethod
     def legacy(cls, dist: float = 55.0, key_mode: str = "auto", despill: float = 0.0) -> MatteSettings:
-        """The cfed170 keyer: binary border flood with its first-ring despill strength and nothing else."""
+        """Apply binary border-flood keying with the configured edge despill."""
         return cls(matte="binary", key="magenta", key_mode=key_mode, despill_mode="off", pockets="keep",
                    temporal="off", dist=dist, despill=despill)
 
@@ -430,7 +413,7 @@ def load_matte_profile(path: Path) -> dict:
     """Read the ``matte`` block a character profile (video2dsprite.character_profile.v1) pins."""
     path = Path(path)
     try:
-        document = fc.read_json(path, strict=True)  # UTF-8 with or without a BOM (D28)
+        document = fc.read_json(path, strict=True)
     except ValueError as exc:
         raise ValueError(f"matte profile {path.name} is not valid JSON: {exc}") from None
     if not isinstance(document, dict) or document.get("schema") != PROFILE_SCHEMA:
@@ -458,7 +441,6 @@ def matte_settings(args: argparse.Namespace, *,
 
     A flag that contradicts the profile wins but is warned about and recorded,
     because it makes this clip's matte differ from the character's other clips
-    (game-opus55 pixelate.py L472-477).
     """
     explicit = {"matte": args.matte, "key": args.key, "erode": args.erode, "unmix": args.unmix,
                 "despill_mode": args.despill_mode}
@@ -493,8 +475,6 @@ def matte_settings(args: argparse.Namespace, *,
     settings.validate()
     return settings, profile
 
-
-# --------------------------------------------------------------------------- clip planning
 
 def _local_key_dominance(rgb: np.ndarray, key_rgb: Sequence[float]) -> np.ndarray:
     """How far colours lean to the key's channels: min(key channels) - max(other channels)."""
@@ -553,7 +533,7 @@ def _estimate_frame(path: Path, declared: str, settings: MatteSettings) -> tuple
     elif settings.key_mode != "auto":
         skip = False
     elif settings.matte == "binary":
-        skip = bool((pixels[..., 3] < 255).any())  # the cfed170 rule: any transparency keeps the frame
+        skip = bool((pixels[..., 3] < 255).any())  # Preserve frames that already contain transparency.
     else:
         skip = bool(estimate["use_native_alpha"])
     return info["sha256"], pixels.shape, key_rgb, estimate, skip
@@ -584,7 +564,7 @@ def _plan_clip(paths: list[Path], settings: MatteSettings, reference: np.ndarray
     explicit_rgb = np.array([int(declared[i:i + 2], 16) for i in (1, 3, 5)], np.float32) if explicit else None
     keys, passthrough, estimates, digests, shapes = [], [], [], [], set()
     estimate_one = functools.partial(_estimate_frame, declared=declared, settings=settings)
-    with contextlib.closing(ordered_map(estimate_one, paths, workers)) as stream:  # threads end before we go on
+    with contextlib.closing(ordered_map(estimate_one, paths, workers)) as stream:
         for digest, shape, key_rgb, estimate, skip in stream:
             digests.append(digest)
             shapes.add(shape)
@@ -671,8 +651,6 @@ def _plan_clip(paths: list[Path], settings: MatteSettings, reference: np.ndarray
                      warnings, at_risk, temporal_active, reason)
 
 
-# --------------------------------------------------------------------------- keying
-
 class _LocalAlphaHysteresis:
     """Streaming twin of forge_matte.temporal_alpha_hysteresis for 8-bit alpha (loop off).
 
@@ -722,21 +700,6 @@ def _absdiff(first: np.ndarray, second: np.ndarray) -> np.ndarray:
     return np.maximum(first, second) - np.minimum(first, second)
 
 
-def _local_still_mask(previous_rgb: np.ndarray, current_rgb: np.ndarray, tolerance: int = 20) -> np.ndarray:
-    """Pixels whose raw colour changed by at most ``tolerance`` (max channel): forge_matte.flip_count's motion rule."""
-    return _absdiff(previous_rgb, current_rgb).max(-1) <= tolerance
-
-
-def _local_pair_flips(previous_alpha: np.ndarray, current_alpha: np.ndarray, still: np.ndarray) -> int:
-    """forge_matte.flip_count for one pair of 8-bit alpha planes: |a - b| / 255 > 0.25 is |a - b| >= 64.
-
-    The library rebuilds the motion mask and float planes on every call; a clip
-    counts flips twice per pair (before and after hysteresis), so the mask is
-    built once (_local_still_mask). Equality with the library is tested.
-    """
-    return int(((_absdiff(previous_alpha, current_alpha) >= 64) & still).sum())
-
-
 def _local_pair_flip_counts(previous_rgb: np.ndarray, current_rgb: np.ndarray, previous_before: np.ndarray,
                             before: np.ndarray, previous_after: np.ndarray, after: np.ndarray,
                             tolerance: int = 20) -> tuple[int, int]:
@@ -756,7 +719,8 @@ def _local_pair_flip_counts(previous_rgb: np.ndarray, current_rgb: np.ndarray, p
 
 def _visible_box(rgba: np.ndarray) -> tuple[int, int, int, int] | None:
     """Box of the alpha > 0 pixels: matte_qa and pocket removal read and change only these and their
-    transparent or off-canvas neighbours, so running them on this crop is exact (tests prove it)."""
+    transparent or off-canvas neighbours, so running them on this crop is exact (tests prove it).
+    """
     return fc.subject_bbox(rgba[..., 3], 0)
 
 
@@ -769,7 +733,8 @@ def _local_matte_qa(rgba: np.ndarray, key_rgb: np.ndarray) -> dict:
 
 def _local_remove_pockets(rgba: np.ndarray, key_rgb: np.ndarray) -> tuple[np.ndarray, int]:
     """forge_matte.remove_enclosed_pockets on the alpha > 0 crop, pasted back: the same pixels and count
-    (a pocket is made of visible pixels, all inside the box)."""
+    (a pocket is made of visible pixels, all inside the box).
+    """
     box = _visible_box(rgba)
     if box is None:
         return np.array(rgba, copy=True), 0
@@ -781,8 +746,7 @@ def _local_remove_pockets(rgba: np.ndarray, key_rgb: np.ndarray) -> tuple[np.nda
 
 
 def _local_erode_alpha(rgba: np.ndarray, steps: int) -> np.ndarray:
-    """Shrink the matte ``steps`` px: alpha becomes the minimum of its 4-neighbourhood ``steps`` times
-    (edge pixels repeat outward), as game-opus55 pixelate.py _erode does against compression halos."""
+    """Shrink alpha by repeated four-neighbour minima, repeating edge pixels outward."""
     alpha = rgba[..., 3]
     for _ in range(steps):
         padded = np.pad(alpha, 1, mode="edge")
@@ -1069,29 +1033,6 @@ def key_frames(raw_dir: Path, clean_dir: Path, settings: MatteSettings = MatteSe
     return report
 
 
-def clean_frames(
-    raw_dir: Path,
-    clean_dir: Path,
-    dist: float = 55.0,
-    key_mode: str = "auto",
-    despill: float = 0.0,
-) -> list[Path]:
-    """cfed170 API: key ``raw_dir`` into ``clean_dir`` in place with the legacy binary keyer.
-
-    The pixels equal the cfed170 output (frames with native alpha pass through,
-    RGB zeroed under alpha 0). Keyed frames an earlier run left in
-    ``clean_dir`` are removed first and matte-report.json is written beside
-    the frames. The ``clean`` and ``process`` verbs use key_frames with the
-    soft-matte defaults instead.
-    """
-    clean_dir = _ensure_dir(Path(clean_dir))
-    for old in clean_dir.glob("clean_*.png"):
-        old.unlink()
-    (clean_dir / MATTE_REPORT).unlink(missing_ok=True)
-    key_frames(raw_dir, clean_dir, MatteSettings.legacy(dist, key_mode, despill))
-    return sorted(clean_dir.glob("clean_*.png"))
-
-
 def _check_matte_gate(report: dict, settings: MatteSettings) -> None:
     """--strict refuses frames whose matte QA failed; otherwise they are published with a warning."""
     failed = [f"{check['id']} {check['value']} (limit {check['threshold']})"
@@ -1105,8 +1046,6 @@ def _check_matte_gate(report: dict, settings: MatteSettings) -> None:
     _log(f"warning: {message}; the frames are published for review (--strict refuses them)")
 
 
-# --------------------------------------------------------------------------- sampling and previews
-
 _LEGACY_PREVIEW_MS = ((40, 25), (20, 40), (12, 60), (0, 80))
 
 
@@ -1116,7 +1055,7 @@ def preview_durations(count: int, duration: float | None = None,
 
     GIF stores centiseconds, so ``duration`` seconds becomes round(duration *
     100) centiseconds split with forge_core.frame_durations (at least 10 ms per
-    frame) instead of one rounded delay repeated. Without a duration the cfed170
+    frame) instead of one rounded delay repeated. Without a duration the legacy
     preview speed applies (25, 40, 60 or 80 ms by the requested count), listed
     as the whole centiseconds GIF actually stores.
     """
@@ -1147,8 +1086,8 @@ def build_exports(
     sub = _ensure_dir(out_sprite_dir / tag) if tag else out_sprite_dir
     for old in sub.glob("sprite_*.png"):
         old.unlink()
-    # Sprites, strips and grids are straight-alpha RGBA with RGB zeroed under alpha 0 (Appendix D): the
-    # LANCZOS resize leaves colour there, and paste() copies it (r2-conventions finding 4).
+    # Sprites, strips and grids are straight-alpha RGBA with RGB zeroed under alpha 0: the
+    # LANCZOS resize leaves colour there, and paste() copies it.
     paths = []
     for i, sp in enumerate(sprites):
         p = sub / f"sprite_{i + 1:02d}.png"
@@ -1249,9 +1188,7 @@ def sample_and_export(
         # Always also write under xN for consistency when n!=8;
         # for 8, write both root sprites and optional x8.
         if n_want == 8:
-            # root-level sprite_01..08 for backwards compat
             info = build_exports(sprites, sprite_dir, tag="", n_frames=n_want, gif_ms=gif_ms, durations_ms=durations)
-            # also x8 folder
             build_exports(sprites, sprite_dir, tag="x8", n_frames=n_want, gif_ms=gif_ms, durations_ms=durations)
         else:
             info = build_exports(sprites, sprite_dir, tag=tag, n_frames=n_want, gif_ms=gif_ms, durations_ms=durations)
@@ -1288,11 +1225,10 @@ def write_readme(out_dir: Path, meta: dict) -> None:
     (out_dir / "README.txt").write_text("\n".join(lines), encoding="utf-8")
 
 
-# --------------------------------------------------------------------------- triage
-
 def _border_subject(frame: np.ndarray, key_rgb: np.ndarray | None, ring: int) -> dict[str, int]:
     """Subject pixels on each border strip: alpha >= 16 on a transparent frame; on a keyed frame the pixels
-    farther than 48 (RGB) from the key that lean less than half as far to its channels as the key (not haze)."""
+    farther than 48 (RGB) from the key that lean less than half as far to its channels as the key (not haze).
+    """
     height, width = frame.shape[:2]
     strips = {"top": frame[:ring], "bottom": frame[height - ring:], "left": frame[:, :ring],
               "right": frame[:, width - ring:]}
@@ -1469,10 +1405,8 @@ def triage_clip(video: Path, out_dir: Path, *, key: str = "auto", border_px: int
     return report
 
 
-# --------------------------------------------------------------------------- key plan
-
 def _keyed_master(pixels: np.ndarray) -> tuple[np.ndarray | None, dict]:
-    """The master with its backdrop removed, for listing design colours at risk (D33).
+    """The master with its backdrop removed, for listing design colours at risk.
 
     A master with transparency is used as it is. An opaque master is keyed first, as ``clean
     --reference`` keys an opaque reference: on a magenta, green or blue backdrop (the declared key whose
@@ -1513,15 +1447,7 @@ def _keyed_master(pixels: np.ndarray) -> tuple[np.ndarray | None, dict]:
 
 
 def key_plan(master: Path, candidates: Sequence[str] = KEY_PLAN_CANDIDATES) -> dict:
-    """Recommend the chroma key for an approved master before generation (Dusk prepare-actors.py L18).
-
-    A key is rejected when more than 0.5% of the master's subject pixels lean
-    to it by 40 or more (forge_matte.choose_key_color): a purple, violet or pink
-    design rejects magenta. Also returns the background sentence for the
-    video prompt and the design colours the video soft matte would still key
-    out with the recommended key; an opaque master is keyed on its own backdrop
-    first (D33, see _keyed_master), so its backdrop is never listed.
-    """
+    """Recommend a backdrop key from the approved master and report colour-overlap risks."""
     names = [_normalise_key(candidate) for candidate in candidates]
     if not names or "auto" in names:
         raise ValueError("--candidates lists magenta, green, blue or #rrggbb keys")
@@ -1553,10 +1479,7 @@ def key_plan(master: Path, candidates: Sequence[str] = KEY_PLAN_CANDIDATES) -> d
     return plan
 
 
-# --------------------------------------------------------------------------- commands
-
 def _summary(**fields: Any) -> None:
-    """The one-line ASCII JSON summary every verb prints on success."""
     print(json.dumps(fields, ensure_ascii=True))
 
 
@@ -1724,20 +1647,11 @@ def cmd_key_plan(args: argparse.Namespace) -> int:
     return 0
 
 
-
-
-
-
-
-
 def cmd_doctor(args: argparse.Namespace) -> int:
     info = fa.ffmpeg_info()
-    functional = info.get("functional", {})
-    _summary(**info, webm=bool(functional.get("vp9_alpha")), packed=bool(functional.get("libx264")), png=True)
+    _summary(**info)
     return 0
 
-
-# --------------------------------------------------------------------------- parser
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -1881,8 +1795,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2 (argparse); refused input and failed gates print ``error: ...`` and exit 1; anything
-    unexpected prints ``error: internal error (...)`` and exits 1 (D26, D27; forge_core.run_cli)."""
     expected = fc.CLI_EXPECTED_ERRORS + (FrameInputError, fa.ForgeAVError)
     return fc.run_cli(_run, argv, expected=expected)
 

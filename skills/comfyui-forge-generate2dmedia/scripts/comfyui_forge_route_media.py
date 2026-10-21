@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ComfyUI-only generation router. No credentials, cloud providers, CLI delegation or fallback."""
+"""Route image-to-video generation through local ComfyUI."""
 from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field

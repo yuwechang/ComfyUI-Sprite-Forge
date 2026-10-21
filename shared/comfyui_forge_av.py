@@ -1,40 +1,13 @@
-"""Canonical ffmpeg/ffprobe helpers for Agent Sprite Forge (forge_av, API v1).
+"""FFmpeg/FFprobe discovery, stream inspection and RGBA decoding (API 1).
 
-One shared implementation of the video plumbing the skills need:
-
-* discovery: ``ffmpeg_info()`` proves capabilities functionally. A VP9 frame
-  with a transparent half must survive an encode and a libvpx-vp9 decode, and
-  libx264 must really encode. ``ffmpeg -encoders`` text is never trusted.
-* probing: ``probe()`` describes the real video stream. Cover art (attached
-  pictures) and audio tracks are counted, never mistaken for the clip.
-* decoding: ``extract_frames``, ``iter_rgba`` and ``decode_rgba`` keep source
-  timing (passthrough) and decode WebM alpha with libvpx, because the native
-  VP8/VP9 decoders silently drop the alpha plane.
-* encoding: VP9-alpha WebM, packed-alpha H.264 (RGB left, alpha right, even
-  halves, BT.709 limited range, faststart) and loop-aligned closed-GOP H.264.
-  Frame rates are rational and capped at 60 fps. Colour under alpha 0 is edge
-  bled so 4:2:0 chroma keeps soft edges true; ffmpeg scaling premultiplies.
-* container checks: moov placement, packet count, duration and DTS order.
-
-Every subprocess runs with stdin closed and decodes text as UTF-8 with
-replacement. Failures raise ForgeAVError (a RuntimeError) carrying an ASCII
-tail of ffmpeg's stderr. Encoders write deterministic bytes, never replace an
-existing file and never leave a partial one behind. Requires ffmpeg 5.1+.
-
-Frame files are read with forge_core.load_rgba (16-bit, indexed and LA PNGs
-are converted correctly; animated files are refused) and finished encodes
-are published with forge_core.publish_file_no_replace (D30): forge_core is
-vendored next to this file in every skill that ships it.
-
-Canonical source: shared/comfyui_forge_av.py. Skills vendor byte-identical copies
-(shared/VENDORED.json); edit only this file, then run
-``python tools/comfyui_forge_vendor_sync.py --write``.
+Requires FFmpeg 5.1+. Capability probes verify RGBA decoding and stream inspection.
+Images use straight-alpha RGBA.
+Canonical copies and skill destinations are listed in shared/VENDORED.json.
 """
 from __future__ import annotations
 
 import copy
 import functools
-import hashlib
 import json
 import math
 import os
@@ -45,10 +18,9 @@ import sys
 import tempfile
 import threading
 import time
-import uuid
 from fractions import Fraction
 from pathlib import Path
-from typing import Iterable, Iterator, Mapping, Sequence
+from typing import Iterator, Mapping, Sequence
 
 import numpy as np
 from PIL import Image
@@ -61,33 +33,18 @@ import comfyui_forge_core  # noqa: E402  (the sibling copy: shared/ or the skill
 if str(getattr(comfyui_forge_core, "FORGE_CORE_API_VERSION", "")).split(".")[0] != "1":
     raise ImportError("forge_av needs forge_core API version 1.x next to it; run tools/comfyui_forge_vendor_sync.py --write.")
 
-FORGE_AV_API_VERSION = "1"
 DEFAULT_TIMEOUT = 300.0
-MAX_FPS = 60
-PACKED_LAYOUT = "rgb-left-alpha-right"
 ALPHA_MODES = ("auto", "on", "off")
-DECODE_PIXEL_BUDGET = 1 << 28  # about 1 GiB of RGBA frames
-# Alpha encoders fill colour under alpha 0 up to this many px from the subject.
-# Invisible after compositing, it halves soft-edge error from 4:2:0 chroma
-# (antialiased 320 px sprite, translucent-edge RGB MAE 20.0 -> 4.2).
-EDGE_BLEED_PX = 3
 
 # The native VP8/VP9 decoders ignore WebM's alpha side channel; libvpx keeps it.
 _ALPHA_DECODERS = {"vp8": "libvpx", "vp9": "libvpx-vp9"}
 _ALPHA_PIX_FMT = re.compile(r"^(yuva|gbrap|ya\d|rgba|bgra|argb|abgr|ayuv|vuya|pal8)")
 _FFMPEG_GLOBAL = ("-hide_banner", "-loglevel", "error", "-nostdin", "-n")
-# Bitexact muxing (no random WebM UIDs, no version tags) plus the fixed encoder
-# thread counts below make identical frames give identical bytes.
-_DETERMINISTIC_MUX = ("-map_metadata", "-1", "-fflags", "+bitexact")
-_BT709_TAGS = ("-color_range", "tv", "-colorspace", "bt709",
-               "-color_primaries", "bt709", "-color_trc", "bt709")
 
 
 class ForgeAVError(RuntimeError):
     """ffmpeg/ffprobe is missing, failed, timed out or produced unusable output."""
 
-
-# ---------------------------------------------------------------- processes
 
 def run(cmd: Sequence[str], timeout: float = DEFAULT_TIMEOUT) -> str:
     """Run ``cmd`` and return its stdout decoded as UTF-8 (errors replaced).
@@ -155,21 +112,6 @@ class _Child:
             raise ForgeAVError(_failure(self.argv, code, self._errors.read().decode("utf-8", "replace")))
 
 
-def _feed(argv: list[str], chunks: Iterable[bytes], timeout: float) -> None:
-    """Run ffmpeg with ``chunks`` streamed to stdin (one frame in memory at a time)."""
-    with _Child(argv, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, timeout=timeout) as child:
-        for chunk in chunks:
-            try:
-                child.proc.stdin.write(chunk)
-            except OSError:  # ffmpeg exited early (EPIPE, or EINVAL on Windows); stderr says why
-                break
-        try:
-            child.proc.stdin.close()
-        except OSError:
-            pass
-        child.finish()
-
-
 def _unlink_settled(path: Path, *, attempts: int = 60, delay: float = 0.05) -> None:
     """Remove ``path`` if present. On Windows, retry for up to 3 s while another process holds it.
 
@@ -232,86 +174,64 @@ def _ffprobe_json(args: Sequence[str]) -> dict:
         raise ForgeAVError(f"ffprobe returned invalid JSON: {exc}") from exc
 
 
-# ---------------------------------------------------------------- discovery
-
 def ffmpeg_info() -> dict:
-    """Locate ffmpeg/ffprobe and prove what they can do (cached per binary pair).
-
-    Keys: ``ffmpeg`` and ``ffprobe`` (paths or None), ``version``, and
-    ``functional`` with ``vp9_alpha`` (a VP9 frame with a transparent half
-    survives forge_av's own encoder and a libvpx-vp9 decode) and ``libx264``
-    (forge_av's packed H.264 encode decodes again). ``errors`` explains every
-    failed check.
-    """
+    """Check FFmpeg/FFprobe and verify RGBA decoding and stream inspection."""
     return copy.deepcopy(_probe_capabilities(shutil.which("ffmpeg"), shutil.which("ffprobe")))
 
 
 @functools.lru_cache(maxsize=4)
 def _probe_capabilities(ffmpeg: str | None, ffprobe: str | None) -> dict:
     info = {"ffmpeg": ffmpeg, "ffprobe": ffprobe, "version": None,
-            "functional": {"vp9_alpha": False, "libx264": False}, "errors": {}}
-    if not ffprobe:
-        info["errors"]["ffprobe"] = "ffprobe not found on PATH"
-    if not ffmpeg:
-        info["errors"]["ffmpeg"] = "ffmpeg not found on PATH"
+            "functional": {"rgba_decode": False, "stream_probe": False}, "errors": {}}
+    for name, binary in (("ffmpeg", ffmpeg), ("ffprobe", ffprobe)):
+        if not binary:
+            info["errors"][name] = name + " not found on PATH"
+    if not ffmpeg and not ffprobe:
         return info
-    try:
-        banner = run([ffmpeg, "-hide_banner", "-version"], timeout=30).split()
-        info["version"] = banner[2] if banner[:2] == ["ffmpeg", "version"] and len(banner) > 2 else None
-    except ForgeAVError as exc:
-        info["errors"]["version"] = str(exc)
+    if ffmpeg:
+        try:
+            banner = run([ffmpeg, "-hide_banner", "-version"], timeout=30).split()
+            info["version"] = banner[2] if banner[:2] == ["ffmpeg", "version"] and len(banner) > 2 else None
+        except ForgeAVError as exc:
+            info["errors"]["version"] = str(exc)
     with tempfile.TemporaryDirectory(prefix="forge-av-probe-") as tmp:
-        for name, check in (("vp9_alpha", _check_vp9_alpha), ("libx264", _check_libx264)):
+        frame = _probe_frame()
+        source = Path(tmp) / "probe.png"
+        Image.fromarray(frame).save(source)
+        if ffmpeg:
             try:
-                check(ffmpeg, Path(tmp))
-                info["functional"][name] = True
+                argv = [ffmpeg, *_FFMPEG_GLOBAL, "-i", str(source),
+                        "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"]
+                decoded = list(_stream_frames(argv, frame.shape, 60))
+                if len(decoded) != 1 or not np.array_equal(decoded[0], frame):
+                    raise ForgeAVError("RGBA decode did not preserve the probe frame")
+                info["functional"]["rgba_decode"] = True
             except ForgeAVError as exc:
-                info["errors"][name] = str(exc)
+                info["errors"]["rgba_decode"] = str(exc)
+        if ffprobe:
+            try:
+                data = run([ffprobe, "-v", "error", "-show_streams", "-of", "json", str(source)], timeout=60)
+                streams = json.loads(data).get("streams", [])
+                if not any(s.get("codec_type") == "video" and s.get("width") == frame.shape[1]
+                           and s.get("height") == frame.shape[0] for s in streams):
+                    raise ForgeAVError("FFprobe did not identify the probe dimensions")
+                info["functional"]["stream_probe"] = True
+            except (ForgeAVError, ValueError, TypeError, AttributeError) as exc:
+                info["errors"]["stream_probe"] = str(exc)
     return info
 
 
 def _probe_frame(size: int = 32) -> np.ndarray:
-    """Left half transparent, right half opaque orange."""
     frame = np.zeros((size, size, 4), np.uint8)
     frame[:, size // 2:] = (224, 96, 32, 255)
     return frame
 
 
-def _check_vp9_alpha(ffmpeg: str, folder: Path, decoder: str = "libvpx-vp9") -> None:
-    """Raise ForgeAVError unless a VP9 alpha frame round-trips through ``decoder``."""
-    frame = _probe_frame()
-    movie = folder / f"probe-{decoder}.webm"
-    encode_vp9_alpha([frame], movie, 1, timeout=60)
-    argv = [ffmpeg, *_FFMPEG_GLOBAL, "-c:v", decoder, "-i", str(movie),
-            "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"]
-    decoded = list(_stream_frames(argv, frame.shape, 60))
-    if len(decoded) != 1:
-        raise ForgeAVError(f"VP9 alpha probe decoded {len(decoded)} frames, expected 1")
-    alpha = decoded[0][..., 3].astype(np.float64)
-    quarter = frame.shape[1] // 4
-    clear, solid = alpha[:, :quarter].mean(), alpha[:, -quarter:].mean()
-    if clear > 16 or solid < 239:
-        raise ForgeAVError(f"VP9 alpha did not survive a {decoder} decode "
-                           f"(transparent mean {clear:.0f}, opaque mean {solid:.0f})")
-
-
-def _check_libx264(ffmpeg: str, folder: Path) -> None:
-    """Raise ForgeAVError unless forge_av's libx264 packed encode decodes again."""
-    movie = folder / "probe-libx264.mp4"
-    width, height = encode_packed_alpha([_probe_frame()] * 2, movie, 1, keyint=1, timeout=60)["encodedSize"]
-    argv = [ffmpeg, *_FFMPEG_GLOBAL, "-i", str(movie), "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
-    decoded = list(_stream_frames(argv, (height, width, 3), 60))
-    if len(decoded) != 2:
-        raise ForgeAVError(f"libx264 probe decoded {len(decoded)} frames, expected 2")
-
-
-# ---------------------------------------------------------------- probing
-
 def probe(path) -> dict:
     """Describe the main video stream of ``path``; attached cover art is skipped.
 
     Keys: ``codec``; ``width``/``height`` (display size after container
-    rotation, which is what decode_rgba returns); ``pix_fmt`` as ffprobe
+    rotation, as used when decoding); ``pix_fmt`` as ffprobe
     reports it (VP9 alpha still shows yuv420p); ``fps_rational`` ("num/den" or
     None); ``nb_frames`` (container count, else demuxed packets, see
     ``nb_frames_source``); ``duration`` in seconds of the video stream (not
@@ -421,8 +341,6 @@ def _count_packets(source: Path, index: int) -> int:
     return _positive_int(streams[0].get("nb_read_packets")) or 0
 
 
-# ---------------------------------------------------------------- decoding
-
 def extract_frames(path, out_dir, *, fps=0, start=0, duration=None, alpha="auto",
                    timeout: float = DEFAULT_TIMEOUT) -> list[Path]:
     """Decode the main video stream to ``out_dir/frame_000000.png`` and onwards.
@@ -467,7 +385,7 @@ def iter_rgba(path, *, size=None, alpha="auto", start=0, duration=None,
     """Stream the main video stream as writable (H, W, 4) uint8 RGBA arrays.
 
     One frame is in memory at a time, so long clips can be verified without a
-    pixel budget. Arguments match decode_rgba. ``size=(w, h)`` resizes inside
+    pixel budget. ``size=(w, h)`` resizes inside
     ffmpeg (premultiplied when alpha is kept). Pixels are returned exactly as
     decoded: colour under alpha 0 is not zeroed. Leaving the loop early kills
     ffmpeg.
@@ -487,35 +405,6 @@ def iter_rgba(path, *, size=None, alpha="auto", start=0, duration=None,
             *(["-vf", ",".join(filters)] if filters else []), "-fps_mode", "passthrough",
             "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1"]
     return _stream_frames(argv, (height, width, 4), timeout)
-
-
-def decode_rgba(path, *, size=None, alpha="auto", start=0, duration=None,
-                max_pixels: int = DECODE_PIXEL_BUDGET, timeout: float = DEFAULT_TIMEOUT) -> list[np.ndarray]:
-    """Decode the main video stream to a list of (H, W, 4) uint8 RGBA arrays.
-
-    Timing is passthrough (one array per coded frame). ``alpha``: ``auto``
-    decodes alpha when the stream has it (VP8/VP9 WebM through libvpx),
-    ``on`` raises ValueError for an opaque source, ``off`` returns opaque
-    frames. ``start``/``duration`` keep frames timed in [start, start +
-    duration) seconds. ``size=(w, h)`` resizes in ffmpeg, premultiplied. More
-    than ``max_pixels`` decoded pixels raise ValueError; use iter_rgba() to
-    stream instead.
-    """
-    budget = int(_positive(max_pixels, "max_pixels"))
-    stream = iter_rgba(path, size=size, alpha=alpha, start=start, duration=duration, timeout=timeout)
-    frames, pixels = [], 0
-    try:
-        for frame in stream:
-            pixels += frame.shape[0] * frame.shape[1]
-            if pixels > budget:
-                raise ValueError(f"decoding {Path(path).name} exceeds max_pixels={budget}; trim with "
-                                 "start/duration, pass size=, or stream with iter_rgba()")
-            frames.append(frame)
-    finally:
-        stream.close()
-    if not frames:
-        raise ForgeAVError(f"no frames decoded from {Path(path).name}; check start/duration")
-    return frames
 
 
 def _alpha_plan(info: Mapping, alpha: str) -> tuple[list[str], bool]:
@@ -540,8 +429,6 @@ def _trim_args(start, duration) -> list[str]:
     return args
 
 
-# ---------------------------------------------------------------- encoding
-
 def premultiplied_scale_filter(w: int, h: int) -> str:
     """ffmpeg filter chain that resizes straight RGBA without dark halos.
 
@@ -554,402 +441,6 @@ def premultiplied_scale_filter(w: int, h: int) -> str:
     width, height = _size((w, h))
     return (f"format=gbrap16le,premultiply=inplace=1:planes=7,scale={width}:{height}:flags=lanczos,"
             "unpremultiply=inplace=1:planes=7,format=rgba")
-
-
-def packed_geometry(width: int, height: int) -> dict:
-    """Packed-alpha geometry: each half is padded right/bottom to even pixels.
-
-    ``width``/``height`` are the logical frame; ``halfWidth``/``halfHeight``
-    the physical size of each encoded half (403 -> 404). A runtime crops RGB
-    at (0, 0, width, height) and alpha at (halfWidth, 0, width, height).
-    """
-    w, h = _size((width, height))
-    half_w, half_h = w + (w & 1), h + (h & 1)
-    return {"layout": PACKED_LAYOUT, "width": w, "height": h,
-            "halfWidth": half_w, "halfHeight": half_h, "encodedSize": [2 * half_w, half_h]}
-
-
-def unpack_packed_alpha(frame: np.ndarray, geometry: Mapping) -> np.ndarray:
-    """Rebuild straight RGBA from one decoded packed frame (alpha read from red)."""
-    if geometry.get("layout", PACKED_LAYOUT) != PACKED_LAYOUT:
-        raise ValueError(f"unsupported packed layout: {geometry.get('layout')}")
-    w, h, half_w = int(geometry["width"]), int(geometry["height"]), int(geometry["halfWidth"])
-    data = np.asarray(frame)
-    if data.ndim != 3 or data.shape[2] < 3 or half_w < w or data.shape[0] < h or data.shape[1] < half_w + w:
-        raise ValueError("frame is smaller than the packed geometry")
-    out = np.empty((h, w, 4), np.uint8)
-    out[..., :3] = data[:h, :w, :3]
-    out[..., 3] = data[:h, half_w:half_w + w, 0]
-    return out
-
-
-def encode_vp9_alpha(frames_or_dir, out, fps_rational, crf: int = 28, *, keyint=None,
-                     max_fps=MAX_FPS, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """Encode straight-alpha RGBA frames to a VP9 WebM with a native alpha plane.
-
-    ``frames_or_dir``: a directory of PNG frames (natural sort) or a sequence
-    of (H, W, 3|4) uint8 arrays, PIL images or image paths, all one size;
-    resize beforehand (forge_core.resample_rgba). Transparent colour is edge
-    bled (see EDGE_BLEED_PX). Output is yuva420p tagged BT.709 limited range;
-    decode it with libvpx-vp9 (decode_rgba does). ``keyint`` must divide the
-    frame count so keyframes land on the loop wrap. Rates above ``max_fps``
-    (at most 60) keep the nearest frame per tick; the result records
-    ``fpsCapped`` and the ``inputIndices`` used. Returns file, bytes, sha256,
-    size, timing and the keyframe indices.
-    """
-    clip = _Clip(frames_or_dir, fps_rational, max_fps)
-    quality, gop = _crf(crf, 63), _keyint(keyint, clip.count)
-    argv = [_tool("ffmpeg"), *_FFMPEG_GLOBAL, *_raw_input(clip, "rgba"), "-filter_complex_threads", "1",
-            "-filter_complex", f"[0:v]{_to_bt709('yuva420p')}[v]", "-map", "[v]", "-an",
-            "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-auto-alt-ref", "0", "-b:v", "0",
-            "-crf", str(quality), "-row-mt", "1", "-threads", "2", *_BT709_TAGS,
-            *(["-g", str(gop), "-keyint_min", str(gop)] if gop else []),
-            "-fps_mode", "passthrough", *_DETERMINISTIC_MUX]
-    target, keyframes = _encode_file(out, "webm", argv, (_edge_bleed(f).tobytes() for _, f in clip.frames()),
-                                     clip.count, gop, timeout)
-    return {**_digest(target), "mimeType": "video/webm", "codec": "vp9", "alpha": "native-vp9",
-            "pixFmt": "yuva420p", "width": clip.size[0], "height": clip.size[1], "crf": quality,
-            "keyint": gop, "keyframes": keyframes, **clip.timing()}
-
-
-def encode_packed_alpha(frames, out, fps_rational, crf: int = 18, *, keyint=None,
-                        max_fps=MAX_FPS, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """Encode straight RGBA frames as packed-alpha H.264 (RGB left, alpha right).
-
-    For browsers and iOS without VP9 alpha; a compositor recombines the halves.
-    Each half is padded right/bottom with black to even pixels (403 -> 404,
-    see packed_geometry); RGB stays straight, never composited over black,
-    with transparent colour edge bled. H.264 Main, yuv420p, limited-range
-    BT.709 tags, faststart, closed GOPs. ``frames``, ``keyint`` and
-    ``max_fps`` behave as in encode_vp9_alpha. Returns the packed geometry
-    (``layout``, ``width``, ``height``, ``halfWidth``, ``halfHeight``,
-    ``encodedSize``), file, bytes, sha256, timing and keyframe indices.
-    """
-    clip = _Clip(frames, fps_rational, max_fps)
-    quality, gop = _crf(crf, 51), _keyint(keyint, clip.count)
-    geometry = packed_geometry(*clip.size)
-    half = f"{geometry['halfWidth']}:{geometry['halfHeight']}:0:0:color=black"
-    graph = (f"[0:v]split=2[c][a];[c]format=rgb24,pad={half}[c2];"
-             f"[a]alphaextract,format=rgb24,pad={half}[a2];"
-             f"[c2][a2]hstack=inputs=2,{_to_bt709('yuv420p')}[v]")
-    argv = [_tool("ffmpeg"), *_FFMPEG_GLOBAL, *_raw_input(clip, "rgba"), "-filter_complex_threads", "1",
-            "-filter_complex", graph, "-map", "[v]", "-an", *_x264_args(quality, gop, True),
-            "-movflags", "+faststart", "-fps_mode", "passthrough", *_DETERMINISTIC_MUX]
-    target, keyframes = _encode_file(out, "mp4", argv, (_edge_bleed(f).tobytes() for _, f in clip.frames()),
-                                     clip.count, gop, timeout)
-    return {**_digest(target), "mimeType": "video/mp4", "codec": "h264", "profile": "main", **geometry,
-            "requiresCompositor": True, "crf": quality, "keyint": gop, "keyframes": keyframes, **clip.timing()}
-
-
-def encode_h264_loop(frames, out, fps_rational, *, keyint=None, closed_gop: bool = True, crf: int = 18,
-                     max_fps=MAX_FPS, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """Encode an opaque loop as H.264 whose GOPs line up with the loop wrap.
-
-    ``keyint`` defaults to the loop length (one closed GOP per loop) and must
-    divide the frame count, so the wrap back to frame 0 is always a GOP
-    boundary; scene-cut keyframes are disabled and placement is verified on
-    the written file. Alignment is necessary, not sufficient: codec drift
-    still pops at every keyframe (hd2d single GOP: decoded seam 3.90 vs
-    adjacent p95 1.76; a synthetic masked loop stays near 2x p95 at any
-    keyint and drops to 1.7x at crf 12). Gate on the decoded file and lower
-    ``crf`` when the seam fails. Frames must be opaque with even dimensions.
-    H.264 Main, yuv420p, limited-range BT.709 tags, faststart.
-    """
-    clip = _Clip(frames, fps_rational, max_fps)
-    quality, gop = _crf(crf, 51), _keyint(keyint, clip.count, default=clip.count)
-    width, height = clip.size
-    if width % 2 or height % 2:
-        raise ValueError(f"H.264 4:2:0 needs even dimensions, got {width}x{height}; crop or pad the frames")
-    argv = [_tool("ffmpeg"), *_FFMPEG_GLOBAL, *_raw_input(clip, "rgb24"), "-filter_complex_threads", "1",
-            "-filter_complex", f"[0:v]{_to_bt709('yuv420p')}[v]", "-map", "[v]", "-an",
-            *_x264_args(quality, gop, bool(closed_gop)), "-movflags", "+faststart",
-            "-fps_mode", "passthrough", *_DETERMINISTIC_MUX]
-    target, keyframes = _encode_file(out, "mp4", argv, (_opaque_rgb(i, f).tobytes() for i, f in clip.frames()),
-                                     clip.count, gop, timeout)
-    return {**_digest(target), "mimeType": "video/mp4", "codec": "h264", "profile": "main",
-            "width": width, "height": height, "crf": quality, "keyint": gop,
-            "closedGop": bool(closed_gop), "keyframes": keyframes, **clip.timing()}
-
-
-class _Clip:
-    """Encoder input: lazily loaded frames of one size, with the fps cap applied."""
-
-    def __init__(self, frames, fps_rational, max_fps) -> None:
-        self.sources = _frame_sources(frames)
-        first = _load_frame(self.sources[0])
-        self.size = (first.shape[1], first.shape[0])
-        self.input_fps = _fraction(fps_rational, "fps_rational")
-        cap = _fraction(max_fps, "max_fps")
-        if cap > MAX_FPS:
-            raise ValueError(f"max_fps cannot exceed {MAX_FPS}")
-        self.indices, self.fps = _fps_cap(len(self.sources), self.input_fps, cap)
-        self.count = len(self.indices)
-
-    def frames(self) -> Iterator[tuple[int, np.ndarray]]:
-        for index in self.indices:
-            frame = _load_frame(self.sources[index])
-            if (frame.shape[1], frame.shape[0]) != self.size:
-                raise ValueError(f"frame {index} is {frame.shape[1]}x{frame.shape[0]}; "
-                                 f"every frame must be {self.size[0]}x{self.size[1]}")
-            yield index, frame
-
-    def timing(self) -> dict:
-        return {"frameCount": self.count, "fps": _rational(self.fps),
-                "durationMs": float(Fraction(1000 * self.count) / self.fps),
-                "fpsCapped": self.fps != self.input_fps, "inputFps": _rational(self.input_fps),
-                "inputFrameCount": len(self.sources), "inputIndices": list(self.indices)}
-
-
-def _fps_cap(count: int, fps: Fraction, cap: Fraction) -> tuple[list[int], Fraction]:
-    """Keep every frame at or below ``cap``; otherwise pick the nearest frame per 1/cap tick."""
-    if fps <= cap:
-        return list(range(count)), fps
-    total = max(1, math.floor(count * cap / fps + Fraction(1, 2)))
-    return [min(count - 1, math.floor(k * fps / cap + Fraction(1, 2))) for k in range(total)], cap
-
-
-def _encode_file(out, muxer: str, argv: list[str], chunks: Iterable[bytes], frames: int,
-                 keyint: int | None, timeout: float) -> tuple[Path, list[int]]:
-    """Encode into a hidden sibling, verify packets and GOPs, then publish without replacing."""
-    target = Path(out)
-    if target.exists():
-        raise FileExistsError(f"{target} already exists; forge_av never replaces files")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_name(f".{target.name}.{uuid.uuid4().hex[:12]}.partial")
-    try:
-        _feed([*argv, "-f", muxer, str(partial)], chunks, timeout)
-        packets = _packets(partial, 0)
-        if len(packets) != frames:
-            raise ForgeAVError(f"encoder wrote {len(packets)} packets for {frames} frames")
-        keyframes = _keyframes(packets)
-        if keyint and keyframes != list(range(0, frames, keyint)):
-            raise ForgeAVError(f"keyframes at {keyframes} do not follow keyint {keyint}")
-        try:
-            comfyui_forge_core.publish_file_no_replace(partial, target)  # fsynced copy, hard-linked into place
-        except FileExistsError:
-            raise FileExistsError(f"{target} appeared during encoding; refusing to replace it") from None
-    finally:
-        _unlink_settled(partial)
-    return target, keyframes
-
-
-def _raw_input(clip: _Clip, pix_fmt: str) -> list[str]:
-    return ["-f", "rawvideo", "-pix_fmt", pix_fmt, "-video_size", f"{clip.size[0]}x{clip.size[1]}",
-            "-framerate", _rational(clip.fps), "-i", "pipe:0"]
-
-
-def _to_bt709(pix_fmt: str) -> str:
-    """Full-range RGB to limited-range BT.709 ``pix_fmt``, tagged on the frames.
-
-    ffmpeg 8 ignores -color_primaries/-color_trc unless the frames carry them,
-    hence setparams; the matching output options are kept for older builds.
-    """
-    return (f"scale=in_range=full:out_range=tv:out_color_matrix=bt709,format={pix_fmt},"
-            "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv")
-
-
-def _x264_args(crf: int, keyint: int | None, closed_gop: bool) -> list[str]:
-    args = ["-c:v", "libx264", "-profile:v", "main", "-preset", "fast", "-crf", str(crf),
-            "-threads", "2", "-pix_fmt", "yuv420p", *_BT709_TAGS]
-    if keyint:
-        args += ["-g", str(keyint), "-keyint_min", str(keyint), "-sc_threshold", "0"]
-    return args + (["-flags", "+cgop"] if closed_gop else ["-x264-params", "open-gop=1"])
-
-
-def _edge_bleed(frame: np.ndarray) -> np.ndarray:
-    """Straight RGBA with the colour of transparent pixels bled in from visible ones.
-
-    Colour under alpha 0 is zeroed, then pixels within EDGE_BLEED_PX of the
-    subject take the alpha-weighted mean colour of their visible 3x3
-    neighbours, ring by ring. They stay fully transparent, so nothing visible
-    changes, but 4:2:0 chroma and codec blocks along soft edges stop averaging
-    in false black. Alpha is never touched.
-    """
-    out = np.where(frame[..., 3:] == 0, 0, frame).astype(np.uint8, copy=False)
-    seen = out[..., 3] > 0
-    if seen.all() or not seen.any():
-        return out
-    rows, cols = np.flatnonzero(seen.any(axis=1)), np.flatnonzero(seen.any(axis=0))
-    y0, y1 = max(0, rows[0] - EDGE_BLEED_PX), min(out.shape[0], rows[-1] + EDGE_BLEED_PX + 1)
-    x0, x1 = max(0, cols[0] - EDGE_BLEED_PX), min(out.shape[1], cols[-1] + EDGE_BLEED_PX + 1)
-    view, seen = out[y0:y1, x0:x1], seen[y0:y1, x0:x1].copy()
-    weight = view[..., 3].astype(np.float32) / 255
-    total = view[..., :3].astype(np.float32) * weight[..., None]
-    for _ in range(EDGE_BLEED_PX):
-        sums, counts = _box3(total), _box3(weight)
-        fill = ~seen & (counts > 0)
-        if not fill.any():
-            break
-        colour = sums[fill] / counts[fill][:, None]
-        total[fill], weight[fill], seen[fill] = colour, 1.0, True
-        view[..., :3][fill] = np.rint(colour).astype(np.uint8)
-    return out
-
-
-def _box3(values: np.ndarray) -> np.ndarray:
-    """3x3 neighbourhood sums (zero padded) over the first two axes."""
-    padded = np.pad(values, ((1, 1), (1, 1)) + ((0, 0),) * (values.ndim - 2))
-    rows = padded[:-2] + padded[1:-1] + padded[2:]
-    return rows[:, :-2] + rows[:, 1:-1] + rows[:, 2:]
-
-
-def _opaque_rgb(index: int, frame: np.ndarray) -> np.ndarray:
-    if (frame[..., 3] != 255).any():
-        raise ValueError(f"frame {index} has transparency; encode_h264_loop writes opaque video "
-                         "(use encode_packed_alpha or encode_vp9_alpha for alpha)")
-    return frame[..., :3]
-
-
-def _frame_sources(frames) -> list:
-    if isinstance(frames, (str, os.PathLike)):
-        folder = Path(frames)
-        if not folder.is_dir():
-            raise ValueError(f"frame directory not found: {folder}")
-        sources = sorted(folder.glob("*.png"), key=_natural_key)
-        if not sources:
-            raise ValueError(f"no PNG frames in {folder}")
-        return sources
-    if isinstance(frames, np.ndarray) and frames.ndim != 4:
-        raise ValueError("a frame array must be shaped (frames, height, width, channels)")
-    sources = list(frames)
-    if not sources:
-        raise ValueError("no frames to encode")
-    return sources
-
-
-def _load_frame(item) -> np.ndarray:
-    """One frame as a C-contiguous (H, W, 4) uint8 array; RGB input is opaque.
-
-    A path goes through forge_core.load_rgba, so 16-bit grey keeps its high
-    byte instead of clipping to white, palette and LA files get their alpha,
-    and an animated file is refused (ValueError).
-    """
-    if isinstance(item, (str, os.PathLike)):
-        array = np.asarray(comfyui_forge_core.load_rgba(item)[0])
-    elif isinstance(item, Image.Image):
-        array = np.asarray(item.convert("RGBA"))
-    else:
-        array = np.asarray(item)
-        if array.dtype != np.uint8 or array.ndim != 3 or array.shape[2] not in (3, 4):
-            raise ValueError("frames must be uint8 arrays shaped (height, width, 3 or 4)")
-        if array.shape[2] == 3:
-            array = np.dstack([array, np.full(array.shape[:2], 255, np.uint8)])
-    return np.ascontiguousarray(array)
-
-
-# ---------------------------------------------------------------- container checks
-
-def moov_before_mdat(path) -> bool:
-    """True when an MP4's top-level ``moov`` box precedes ``mdat`` (faststart).
-
-    Reads box headers only. Raises ValueError for a file that is not an
-    ISO-BMFF/MP4 file or whose boxes are truncated.
-    """
-    first: dict[str, int] = {}
-    for kind, offset in _top_level_boxes(Path(path)):
-        first.setdefault(kind, offset)
-    return "moov" in first and "mdat" in first and first["moov"] < first["mdat"]
-
-
-def packet_count(path) -> int:
-    """Number of packets in the main video stream (one per frame for forge_av outputs)."""
-    return len(_video_packets(Path(path)))
-
-
-def duration_ms(path) -> float:
-    """Presentation length of the main video stream in milliseconds.
-
-    Measured from packets as max(pts + duration) - min(pts), so an audio track
-    or cover art never inflates it; falls back to probe()'s duration.
-    """
-    starts, ends = [], []
-    for packet in _video_packets(Path(path)):
-        pts = _seconds_or_none(packet.get("pts_time"))
-        if pts is not None:
-            starts.append(pts)
-            ends.append(pts + (_seconds_or_none(packet.get("duration_time")) or 0.0))
-    if starts and max(ends) > min(starts):
-        return round((max(ends) - min(starts)) * 1000, 6)
-    seconds = probe(path)["duration"]
-    if seconds is None:
-        raise ForgeAVError(f"duration of {Path(path).name} is unknown")
-    return seconds * 1000
-
-
-def timestamps_increasing(path) -> bool:
-    """True when the main video stream's decode timestamps strictly increase.
-
-    H.264 B-frames reorder presentation timestamps in packet order, so DTS
-    (falling back to PTS when a packet has none) is the clock that must rise.
-    """
-    stamps = []
-    for packet in _video_packets(Path(path)):
-        stamp = _seconds_or_none(packet.get("dts_time"))
-        if stamp is None:
-            stamp = _seconds_or_none(packet.get("pts_time"))
-        if stamp is None:
-            return False
-        stamps.append(stamp)
-    return bool(stamps) and all(a < b for a, b in zip(stamps, stamps[1:]))
-
-
-def _video_packets(source: Path) -> list[dict]:
-    """Packets of the main video stream in decode order (one ffprobe pass)."""
-    if not source.is_file():
-        raise FileNotFoundError(source)
-    data = _ffprobe_json(["-show_entries", "stream=index,codec_type:stream_disposition=attached_pic:"
-                          "packet=stream_index,pts_time,dts_time,duration_time,flags", str(source)])
-    index = int(_main_video_stream(data.get("streams") or [], source)["index"])
-    return [packet for packet in data.get("packets") or [] if packet.get("stream_index") == index]
-
-
-def _packets(source: Path, index: int) -> list[dict]:
-    """Packets of stream ``index`` in decode order."""
-    data = _ffprobe_json(["-select_streams", str(index), "-show_entries",
-                          "packet=pts_time,dts_time,duration_time,flags", str(source)])
-    return data.get("packets") or []
-
-
-def _keyframes(packets: Sequence[Mapping]) -> list[int]:
-    """Presentation-order indices of keyframe packets."""
-    order = sorted(packets, key=lambda p: _seconds_or_none(p.get("pts_time")) or 0.0)
-    return [i for i, packet in enumerate(order) if "K" in str(packet.get("flags", ""))]
-
-
-def _top_level_boxes(source: Path) -> list[tuple[str, int]]:
-    boxes, total = [], source.stat().st_size
-    with source.open("rb") as handle:
-        offset = 0
-        while offset < total:
-            handle.seek(offset)
-            header = handle.read(8)
-            if len(header) < 8:
-                raise ValueError(f"truncated MP4 box header at byte {offset}")
-            size, kind = int.from_bytes(header[:4], "big"), header[4:]
-            if not all(32 <= byte < 127 for byte in kind):
-                raise ValueError(f"{source.name} is not an ISO-BMFF/MP4 file")
-            if size == 1:
-                large = handle.read(8)
-                if len(large) < 8:
-                    raise ValueError(f"truncated MP4 box header at byte {offset}")
-                size = int.from_bytes(large, "big")
-            elif size == 0:
-                size = total - offset
-            if size < 8 or offset + size > total:
-                raise ValueError(f"invalid or truncated MP4 box {kind.decode('ascii')!r} at byte {offset}")
-            boxes.append((kind.decode("ascii"), offset))
-            offset += size
-    return boxes
-
-
-# ---------------------------------------------------------------- values
-
-def _digest(path: Path) -> dict:
-    sha = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            sha.update(block)
-    return {"file": path.name, "bytes": path.stat().st_size, "sha256": sha.hexdigest()}
 
 
 def _fraction(value, name: str, *, allow_zero: bool = False) -> Fraction:
@@ -969,26 +460,6 @@ def _fraction(value, name: str, *, allow_zero: bool = False) -> Fraction:
 
 def _rational(rate: Fraction) -> str:
     return f"{rate.numerator}/{rate.denominator}"
-
-
-def _keyint(value, frames: int, default: int | None = None) -> int | None:
-    if value is None:
-        return default
-    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
-        raise TypeError("keyint must be a whole number of frames")
-    keyint = int(value)
-    if not 1 <= keyint <= frames:
-        raise ValueError(f"keyint must be between 1 and the clip length ({frames} frames)")
-    if frames % keyint:
-        raise ValueError(f"keyint {keyint} does not divide the {frames}-frame loop; "
-                         "keyframes must land on the loop wrap")
-    return keyint
-
-
-def _crf(value, maximum: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or not 0 <= int(value) <= maximum:
-        raise ValueError(f"crf must be a whole number from 0 to {maximum}")
-    return int(value)
 
 
 def _size(size) -> tuple[int, int]:

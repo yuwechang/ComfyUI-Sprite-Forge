@@ -1,59 +1,6 @@
-"""A JSON Schema Draft 2020-12 evaluator for the forge contracts, standard library only.
-
-Skills validate their inputs and outputs against their vendored references/schemas at run
-time, without jsonschema (a dev-only dependency). This module is B13's built-in evaluator
-(comfyui_forge_map_bundle.py) promoted per integration decision D31, merged with what B18's
-_LocalContracts (comfyui_forge_render_pixelspec.py) did better, and completed with the remaining simple
-Draft 2020-12 assertions, because pending schema requests use uniqueItems (B06) and
-dependentRequired (B16), which neither evaluator supported. tests/test_forge_schema.py
-proves the verdicts equal jsonschema's on every contract fixture.
-
-Canonical copy: shared/comfyui_forge_schema.py; byte-identical copies ship where skills validate
-contracts at run time (shared/VENDORED.json).
-
-API
-  schema_set(directory) -> SchemaSet: the *.schema.json documents of one folder (cached).
-  SchemaSet.errors(instance, ref) -> ["$.json.path: message", ...]; empty when valid.
-      ref is "<file>#<json pointer>", for example "common.schema.json#/$defs/fpsValue",
-      or an absolute URI that matches a document's $id.
-  SchemaSet.contract_errors(instance, domain, definition): the same for
-      "<domain>.schema.json#/$defs/<definition>".
-  SchemaSet.is_valid(instance, ref); SchemaSet.check_supported() raises on keywords this
-      evaluator does not implement; contract_errors(instance, domain, definition,
-      schema_dir=...) is a one-call shortcut.
-
-Semantics (Draft 2020-12, as the jsonschema package's Draft202012Validator evaluates it):
-  * Supported assertions and applicators: $ref, type, enum, const, multipleOf, minimum,
-    maximum, exclusiveMinimum, exclusiveMaximum, minLength, maxLength, pattern, prefixItems,
-    items, contains with minContains and maxContains, minItems, maxItems, uniqueItems,
-    required, properties, patternProperties, additionalProperties, propertyNames,
-    minProperties, maxProperties, dependentRequired, dependentSchemas, allOf, anyOf, oneOf,
-    not, if / then / else, and boolean schemas.
-  * Annotations, never asserted: $schema, $id (document roots only), $comment, $defs,
-    $vocabulary, title, description, default, examples, deprecated, readOnly, writeOnly,
-    format (as jsonschema does without a format checker), contentEncoding,
-    contentMediaType and contentSchema.
-  * Anything else (unevaluatedProperties, unevaluatedItems, $anchor, $dynamicRef,
-    $dynamicAnchor, a nested $id, a draft-07 keyword such as dependencies, or a typo) raises
-    SchemaError instead of being skipped, so a schema change that needs more than this
-    evaluator fails loudly. jsonschema itself would ignore an unknown keyword.
-  * Types: integer accepts whole floats (1.0); booleans are never numbers. Equality (enum,
-    const, uniqueItems) is JSON equality: 1 == 1.0, true != 1, object key order ignored.
-    Strings count code points; pattern uses Python's re.search, which matches ECMA-262 for
-    the patterns the contracts use.
-  * $ref resolves against the $id of the document it appears in (RFC 3986); a reference
-    whose document is not a loaded $id falls back to the file of that name in the folder.
-    Fragments are JSON pointers (~0, ~1 and percent escapes).
-
-Error lines read "$.json.path: message". Paths follow jsonschema's json_path ($.a.b[0],
-$['odd key']) and messages follow its wording ("'x' is a required property", "'q' is not
-one of ['a', 'b']", ...). Differences, for readability: a failed type check skips the other
-assertions on that value; long values are shortened; an anyOf / oneOf failure names the
-closest branch error; a propertyNames failure names the property.
-"""
+"""Validate offline test fixtures against their local JSON contracts."""
 from __future__ import annotations
 
-import functools
 import json
 import os
 import re
@@ -62,7 +9,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urldefrag, urljoin
 
-FORGE_SCHEMA_API_VERSION = "1"
 
 ASSERTIONS = frozenset({
     "$ref", "type", "enum", "const", "multipleOf", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
@@ -79,17 +25,10 @@ KEYWORDS = ASSERTIONS | ANNOTATIONS
 MAX_DEPTH = 256  # nested schema evaluations; deeper means a $ref loop that never consumes the instance
 _PATH_KEY = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")  # jsonschema's json_path rule
 
-__all__ = [
-    "FORGE_SCHEMA_API_VERSION", "ASSERTIONS", "ANNOTATIONS", "KEYWORDS", "SchemaError", "SchemaSet", "schema_set",
-    "contract_errors", "json_path", "is_type", "json_equal", "schema_keywords",
-]
-
 
 class SchemaError(ValueError):
     """A schema this evaluator cannot use: unreadable, unresolvable or with an unsupported keyword."""
 
-
-# --------------------------------------------------------------------------- JSON values
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -193,7 +132,6 @@ def schema_keywords(schema: Any) -> set[str]:
 
 
 def _patterns_of(schema: Any) -> list[str]:
-    """Every pattern and patternProperties key of a schema document."""
     found: list[str] = []
 
     def walk(node: Any) -> None:
@@ -213,8 +151,6 @@ def _patterns_of(schema: Any) -> list[str]:
     return found
 
 
-# --------------------------------------------------------------------------- the schema set
-
 class SchemaSet:
     """The *.schema.json documents of one folder, addressed by file name or by $id."""
 
@@ -224,7 +160,6 @@ class SchemaSet:
         self._by_name: dict[str, tuple[str, Any]] = {}
         self._patterns: dict[str, re.Pattern[str]] = {}
 
-    # -- documents
 
     def _load(self) -> None:
         if self._by_id is not None:
@@ -258,7 +193,8 @@ class SchemaSet:
 
     def check_supported(self) -> None:
         """Raise SchemaError when a loaded schema uses a keyword this evaluator does not implement
-        or a pattern that Python's re cannot compile."""
+        or a pattern that Python's re cannot compile.
+        """
         self._load()
         for name, (_, document) in sorted(self._by_name.items()):
             unknown = sorted(schema_keywords(document) - KEYWORDS)
@@ -269,7 +205,8 @@ class SchemaSet:
 
     def _resolve(self, ref: Any, base: str) -> tuple[str, Any, bool]:
         """(document base URI, schema node, whether the node is the document root) of a $ref seen
-        in the document whose base URI is ``base``."""
+        in the document whose base URI is ``base``.
+        """
         self._load()
         if not isinstance(ref, str):
             raise SchemaError(f"$ref must be a string, got {_brief(ref)}")
@@ -296,7 +233,6 @@ class SchemaSet:
                     raise SchemaError(f"cannot resolve $ref {ref!r}: no {part!r} in the target") from None
         return document_uri, node, node is document
 
-    # -- public evaluation
 
     def errors(self, instance: Any, ref: str) -> list[str]:
         """Every violation of ``ref`` as "$.json.path: message" lines (empty when the instance is valid)."""
@@ -312,7 +248,6 @@ class SchemaSet:
     def is_valid(self, instance: Any, ref: str) -> bool:
         return not self.errors(instance, ref)
 
-    # -- the evaluator
 
     def _sub(self, value: Any, schema: Any, base: str, path: str, depth: int) -> list[str]:
         out: list[str] = []
@@ -506,21 +441,3 @@ class SchemaSet:
         if "maxProperties" in schema and len(value) > schema["maxProperties"]:
             message = "is expected to be empty" if schema["maxProperties"] == 0 else "has too many properties"
             out.append(f"{path}: {_brief(value)} {message}")
-
-
-# --------------------------------------------------------------------------- shortcuts
-
-@functools.lru_cache(maxsize=None)
-def _cached(directory: str) -> SchemaSet:
-    return SchemaSet(directory)
-
-
-def schema_set(directory: str | os.PathLike) -> SchemaSet:
-    """The (cached) SchemaSet of a folder of *.schema.json files."""
-    return _cached(str(Path(directory).resolve()))
-
-
-def contract_errors(instance: Any, domain: str, definition: str, *, schema_dir: str | os.PathLike) -> list[str]:
-    """Violations of <schema_dir>/<domain>.schema.json#/$defs/<definition> ("$.json.path: message" lines)."""
-    return schema_set(schema_dir).contract_errors(instance, domain, definition)
-

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Select complete forward continuous cycles from RGBA frames.
-
-Pose/velocity closure and explicit geometry determine selection, never action names.
-The separate measure-stride utility measures supplied ground-band translation.
-Selections require visual review; numeric evidence is not artistic approval.
-"""
+"""Select complete forward continuous cycles from RGBA frames."""
 from __future__ import annotations
 
 import comfyui_forge_contracts
@@ -26,7 +21,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 import comfyui_forge_core  # noqa: E402  (this skill's vendored copy)
 
-GAIT_LOOP_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION  # QA envelopes record the package version (D29)
+GAIT_LOOP_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION
 SELECTION_V1 = "forge-frame-selection/v1"
 SELECTION_V2 = "forge-frame-selection/v2"
 SELECTED_STATUS = "selected-needs-visual-review"
@@ -36,25 +31,19 @@ KINDS = ("cycle",)
 
 GLOBAL_SIDE = {"cycle": 160}
 
-# Window classification.
-SEAM_MAX_STEPS = 1.0         # seam (context repeat) error above one ordinary step: rejected
-WRAP_MAX_FACTOR = 2.0        # wrap step outside [1/2, 2] x the source step: stall or snap
 DRIFT_NOTE_PCT = 1.5         # root drift per loop worth a note (percent of body height)
 CLOSURE_MAX_STEPS = 1.0      # continuous-cycle: pose + 0.5 x velocity closure above one step does not loop
 LOW_EXCURSION_NOTE_STEPS = 2.0  # diagnostic only; coarse animation can move less than two adjacent steps
 TOP_WINDOWS = 5
 
-# Holds (near-duplicate frames) and drift.
 DEDUPE_CAP = 1.2             # mean |step| (0-255) at or below which a frame may repeat its predecessor
 HOLD_RELATIVE = 0.4          # ... and below 0.4 x its neighbours' steps and 0.4 x the clip's p75 step
 DRIFT_TOLERANCE = 0.03       # continuous-cycle range ends when scale or position drifts 3 % (of body height)
 DRIFT_SMOOTH_SECONDS = 2.0   # continuous-cycle drift signals: running median over 2 s
 
-# Kept reduced copies (pose features without a second decode).
 REDUCED_SIDE = 480
 REDUCED_BUDGET_BYTES = 256 * 1024 * 1024
 
-# measure-stride.
 BAND_FRACTION = 0.04         # ground band height as a fraction of the body height
 BAND_MATCH_MAX = 0.30        # band mismatch / band mass above this: the pair is not a rigid ground shift
 MIN_STRIDE = (0.1, 0.002)    # a gait moves the ground at least max(0.1 px, 0.2 % of body height) per frame
@@ -69,9 +58,7 @@ NOT_PROVEN = [
 ]
 
 
-# --------------------------------------------------------------------------- small helpers
-
-round_half_up = comfyui_forge_core.round_half_up  # floor(value + 1/2), exact for Fractions; never banker's rounding (D30)
+round_half_up = comfyui_forge_core.round_half_up  # floor(value + 1/2), exact for Fractions; never banker's rounding
 
 
 def _clamp(value: float) -> float:
@@ -143,7 +130,6 @@ def kept_durations(start: int, end: int, kept: Sequence[int], fps: Fraction) -> 
 
 
 def _ranges(values: Iterable[int]) -> str:
-    """``[3, 4, 5, 9]`` -> ``"3-5, 9"`` for messages."""
     values = sorted(set(int(v) for v in values))
     parts, start = [], None
     for index, value in enumerate(values):
@@ -177,13 +163,15 @@ def jsonable(value: Any, digits: int = 6) -> Any:
 
 def directory_ref(directory: Path, base: Path) -> str:
     """Manifest-relative POSIX path of ``directory`` seen from ``base``, or only its name when there is
-    no relative route (another drive): manifests never store absolute paths (forge_core.manifest_path, D30)."""
+    no relative route (another drive): manifests never store absolute paths (forge_core.manifest_path).
+    """
     return comfyui_forge_core.manifest_path(directory, base)
 
 
 def file_ref(path: Path, base: Path, sha256: str | None = None) -> dict:
     """common.schema fileRef {path, sha256, bytes}: manifest-relative path (the bare name off-drive)
-    (forge_core.file_ref, D30)."""
+    (forge_core.file_ref).
+    """
     return comfyui_forge_core.file_ref(path, base, sha256=sha256)
 
 
@@ -205,8 +193,6 @@ def write_selection_files(stage: Path, documents: dict[str, Any]) -> None:
     for name, document in documents.items():
         comfyui_forge_core.write_json(stage / name, jsonable(document))
 
-
-# --------------------------------------------------------------------------- frames and features
 
 def frame_paths(directory: Path, minimum: int = 2) -> list[Path]:
     """Sorted ``*.png`` files: the same list and order as animation_review.sources()."""
@@ -393,7 +379,8 @@ def analysis_budget_bytes():
 
 def pairwise_l1(features: np.ndarray) -> np.ndarray:
     """Symmetric matrix of summed absolute differences (scipy pdist, or a numpy fallback;
-    ``FORGE_CORE_NO_SCIPY=1`` forces the fallback as in forge_core)."""
+    ``FORGE_CORE_NO_SCIPY=1`` forces the fallback as in forge_core).
+    """
     n=len(features)
     # Budget matrix storage and subtraction buffers, not a fixed media frame count.
     budget=analysis_budget_bytes()
@@ -472,14 +459,10 @@ def drift_range(clip: Clip, kind: str, reference: tuple[int, int], smooth: int, 
 
 def moving_steps(steps: np.ndarray, holds: np.ndarray) -> np.ndarray:
     """Steps that carry motion: not into a held duplicate and not exactly zero (a duplicate
-    frame counts as no evidence even when hold detection is off)."""
+    frame counts as no evidence even when hold detection is off).
+    """
     return steps[~holds & (steps > 1e-12)]
 
-
-# --------------------------------------------------------------------------- motion evidence
-
-
-# --------------------------------------------------------------------------- analysis
 
 @dataclass
 class Analysis:
@@ -523,7 +506,7 @@ def analyse(frames_dir: Path, fps: Any, kind: str = "cycle", state: str | None =
     clip = load_clip(Path(frames_dir), rate, minimum=8, keep_reduced=True)
     n = clip.count
     feats = extract_features(clip, kind, register=False)
-    clip.reduced = None  # features done: release the reduced copies
+    clip.reduced = None
     full = feats.pop("full")
     D = pairwise_l1(full)
     silhouette = feats.pop("silhouette")
@@ -548,9 +531,6 @@ def analyse(frames_dir: Path, fps: Any, kind: str = "cycle", state: str | None =
                     lengths={"minFrames": min_len, "maxFrames": max_len})
 
 
-# --------------------------------------------------------------------------- window evidence
-
-
 def _window_drift(a: Analysis, s: int, e: int) -> dict:
     clip = a.clip
     if e >= clip.count:
@@ -561,16 +541,6 @@ def _window_drift(a: Analysis, s: int, e: int) -> dict:
             "root_drift_pct_body": 100 * math.hypot(dx, dy) / a.body_height}
 
 
-def _nms_by_start(rows: list[dict], keep: int) -> list[dict]:
-    picked = []
-    for row in rows:
-        if all(abs(row["start"] - other["start"]) >= 3 for other in picked):
-            picked.append(row)
-        if len(picked) == keep:
-            break
-    return picked
-
-
 def _confidence(components: dict, review: list[str]) -> dict:
     overall = min(components.values())
     label = "high" if overall >= 0.7 else "medium" if overall >= 0.4 else "low"
@@ -578,8 +548,6 @@ def _confidence(components: dict, review: list[str]) -> dict:
             "review_priority": {"high": "spot-check", "medium": "review", "low": "manual-selection"}[label],
             "review": review}
 
-
-# --------------------------------------------------------------------------- continuous-cycle windows
 
 def ambient_window_metrics(a: Analysis, s: int, L: int) -> dict:
     """Closure (pose + 0.5 x velocity), amplitude and wrap of the loop window [s, s + L).
@@ -666,8 +634,6 @@ def confidence_ambient(a: Analysis, best: dict, policy: str) -> dict:
     return _confidence(components, review)
 
 
-# --------------------------------------------------------------------------- recommendation
-
 def kept_indices(a: Analysis, s: int, e: int) -> list[int]:
     """Frames of [s, e) without held duplicates (the first frame is always kept)."""
     return [s] + [i for i in range(s + 1, e) if not a.holds[i]]
@@ -695,7 +661,8 @@ def recommend(a: Analysis, policy: str = "cycle") -> dict:
 
 def sequence_seam(clip: Clip, indices: Sequence[int]) -> dict | None:
     """forge_core.seam_report of the played sequence on full-resolution source frames, inside
-    the union of their visible pixels (so the empty canvas does not dilute it)."""
+    the union of their visible pixels (so the empty canvas does not dilute it).
+    """
     if len(indices) < 2:
         return None
     cache: dict[int, np.ndarray] = {}
@@ -749,7 +716,7 @@ def read_selection(path: Path) -> dict:
     ``durations`` (ms; from fps for v1), ``fps`` (Fraction or None) and ``policy``.
     """
     try:
-        data = comfyui_forge_core.read_json(path, strict=True)  # UTF-8 with or without a BOM (D28)
+        data = comfyui_forge_core.read_json(path, strict=True)
     except ValueError as error:
         raise ValueError(f"selection {Path(path).name} is not valid JSON: {error}") from None
     if not isinstance(data, dict):
@@ -803,7 +770,8 @@ def read_selection(path: Path) -> dict:
 
 def verify_selection(selection: dict, selection_path: Path, frames_dir: Path, clip: Clip | None = None) -> list[Path]:
     """Check that a selection names ``frames_dir`` and that every frame it covers is unchanged
-    (against ``clip``'s hashes when the clip is already loaded)."""
+    (against ``clip``'s hashes when the clip is already loaded).
+    """
     if not resolve_directory(selection["raw"]["sourceDirectory"], selection_path, frames_dir):
         raise ValueError("selection schema/source directory mismatch: it was made for another frames directory")
     paths = clip.paths if clip is not None else frame_paths(frames_dir, 1)
@@ -817,8 +785,6 @@ def verify_selection(selection: dict, selection_path: Path, frames_dir: Path, cl
         raise ValueError("selection hashes no longer match source frames")
     return paths
 
-
-# --------------------------------------------------------------------------- review aids
 
 _BACKGROUND = (238, 232, 220)
 _PANEL = (24, 27, 32)
@@ -870,7 +836,7 @@ def aid_loop_gif(clip: Clip, indices: Sequence[int], durations: Sequence[int], l
             frame.paste(tile, (0, 0))
             draw = ImageDraw.Draw(frame)
             if position == 0:
-                draw.rectangle((0, 0, width - 1, 4), fill=(230, 90, 40))  # wrap marker
+                draw.rectangle((0, 0, width - 1, 4), fill=(230, 90, 40))
             draw.text((4, tile.height + 2), label, fill=(255, 255, 255), font=font)
             draw.text((4, tile.height + 15), f"src {index} {clip.names[index]}  {position + 1}/{len(indices)} "
                                               f"pass {repeat + 1}/{passes}", fill=(210, 210, 210), font=font)
@@ -959,7 +925,8 @@ def aid_onion(clip: Clip, pairs: Sequence[tuple[str, int, int]], title: str, out
 def aid_timeline(a: Analysis, window: dict, out: Path) -> None:
     """Per-frame chart: unusable frames, holds, the drift limit, the chosen window and the
     cadence evidence (gait: local period and two-step ratio; continuous-cycle: distance from the
-    window start and the drift deviation)."""
+    window start and the drift deviation).
+    """
     n = len(a.D)
     step_px = max(4, min(10, 1200 // n))
     width, height, left = n * step_px + 80, 300, 60
@@ -1025,11 +992,10 @@ def write_aids(a: Analysis, rec: dict, indices: Sequence[int], durations: Sequen
             "gifTiming": "GIF delays are 10 ms units whose running sum tracks durations_ms (minimum 20 ms)"}
 
 
-# --------------------------------------------------------------------------- stride and entry frame
-
 def _band_shift(a_band: np.ndarray, b_band: np.ndarray, max_shift: int) -> tuple[float, float] | None:
     """Horizontal motion (px, positive = right) that best maps band A onto band B, and the
-    mismatch relative to their mass; None when either band is empty."""
+    mismatch relative to their mass; None when either band is empty.
+    """
     mass = float(a_band.sum() + b_band.sum())
     if a_band.sum() < 2 or b_band.sum() < 2:
         return None
@@ -1156,8 +1122,6 @@ def entry_frame(clip: Clip, indices: Sequence[int], rest: np.ndarray, band_rows:
             "method": "stance-aligned silhouette XOR against the rest pose (alpha > 32), whole-pixel alignment",
             "perFrame": scores}
 
-
-# --------------------------------------------------------------------------- CLI
 
 def qa_envelope(status: str, method: str, checks: list[dict], inputs: list[dict], outputs: list[dict], *,
         tool: dict | None = None) -> dict:
@@ -1378,8 +1342,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2; refused input (no loop, a changed frame, an existing output) exits 1 with
-    ``error: ...``; anything unexpected prints ``error: internal error (...)`` (D26, D27; forge_core.run_cli)."""
     return comfyui_forge_core.run_cli(_run, argv)
 
 

@@ -1,4 +1,3 @@
-"""Offline regressions for decimal timing, provider removal and safe job recovery."""
 import contextlib
 import copy
 import io
@@ -271,10 +270,9 @@ class JobTests(unittest.TestCase):
         self.assertEqual(plan['generation']['frameCount'], 56)
 
     def test_media_schema_matches_real_receipt(self):
-        sys.path.insert(0, str(ROOT / 'shared'))
-        from comfyui_forge_schema import SchemaSet
+        from contract_schema import SchemaSet
         comfy.execute(self.args, FakeClient())
-        schemas = SchemaSet(ROOT / 'shared/schemas')
+        schemas = SchemaSet(ROOT / 'tests/schemas')
         self.assertEqual(schemas.errors(self.job(), 'media.schema.json#/$defs/job'), [])
         invalid = self.job()
         invalid['frameCount'] = 39.5

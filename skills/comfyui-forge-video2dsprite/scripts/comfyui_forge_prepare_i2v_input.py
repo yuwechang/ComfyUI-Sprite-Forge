@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare an image-to-video input that can be registered by construction.
-
-  prepare  Place the approved master (or one view of a multi-view sheet) on the
-           provider canvas (default 1280x720) with its root on a fixed pixel and
-           one recorded scale (integer NEAREST scaling for pixel art), over a flat
-           key colour the master does not use (an opaque master on a flat
-           magenta, green or blue backdrop is keyed first; the job records
-           masterKeying). Writes input.png, prompt.txt (an
-           action timeline with a numeric work region), a byte copy of the
-           master, review-guide.png and registration_job.json
-           (video2dsprite.registration_job.v1) into a new --output-dir.
-  lint     Check a motion prompt for wording that weakens or breaks a clip.
-
-comfyui_forge_register_clip.py later applies the inverse of the recorded transform to the
-returned clip, so registration never depends on per-frame bounding boxes. This
-script never calls a provider: generate the clip with the host tool,
-the local ComfyUI adapter, then run comfyui_forge_register_clip.py.
-"""
+"""Prepare a character image and registration geometry for local ComfyUI."""
 from __future__ import annotations
 
 import argparse
@@ -40,18 +23,16 @@ import comfyui_forge_matte  # noqa: E402
 import comfyui_forge_background_input
 
 TOOL_NAME = "prepare_i2v_input"
-TOOL_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION  # QA envelopes and jobs record the package version (D29)
+TOOL_VERSION = comfyui_forge_core.FORGE_PACKAGE_VERSION
 JOB_SCHEMA = "video2dsprite.registration_job.v1"
 JOB_FILE = "registration_job.json"
 
 DEFAULT_CANVAS = (1280, 720)
-ROOT_Y_FRACTION = 620 / 720        # Dusk Crossing production root (640, 620) on 1280x720
-SUBJECT_HEIGHT_FRACTION = 530 / 720  # Dusk Crossing subject height on the provider canvas
+ROOT_Y_FRACTION = 620 / 720
+SUBJECT_HEIGHT_FRACTION = 530 / 720
 DEFAULT_MARGIN = 20                # px of the provider canvas kept free on every side
 BLUR_ALLOWANCE = 2                 # px the resampled edge may spread past the subject box
 TEMPLATE_DURATION_S = 6.0          # templates are written for a 6 s take and retimed
-MIN_DURATION_S = 0.0
-
 
 
 @dataclass(frozen=True)
@@ -84,8 +65,6 @@ def motion_template(kind, description):
 
 _FACING_WORDS = {"left": "screen left", "right": "screen right", "front": "the viewer", "back": "away from the viewer"}
 
-
-# --------------------------------------------------------------------------- argument parsing
 
 def parse_numbers(text: str, count: int, name: str, *, integer: bool = False) -> tuple:
     """``count`` comma- (or x-) separated finite numbers, for argparse types."""
@@ -138,13 +117,11 @@ def parse_scale(text: str) -> float | None:
     return value
 
 
-# --------------------------------------------------------------------------- geometry
-
-round_half_up = comfyui_forge_core.round_half_up  # floor(value + 1/2), never banker's rounding (D30)
+round_half_up = comfyui_forge_core.round_half_up  # floor(value + 1/2), never banker's rounding
 
 
 def default_padding(template: ActionTemplate, size: Sequence[int]) -> tuple[int, int, int, int]:
-    """The template's padding fractions in source px (448 px gives Dusk's [96, 80, 96, 24])."""
+    """Convert padding fractions to source pixels."""
     width, height = size
     left, top, right, bottom = template.padding
     return (round_half_up(left * width), round_half_up(top * height),
@@ -152,7 +129,7 @@ def default_padding(template: ActionTemplate, size: Sequence[int]) -> tuple[int,
 
 
 def default_root(canvas: Sequence[int], template: ActionTemplate, margin: float) -> tuple[float, float]:
-    """(W/2, 0.861 H): Dusk's (640, 620) on 1280x720, kept inside the margin; effects: the centre."""
+    """Place actor roots near the lower canvas centre within margins; centre effects."""
     width, height = canvas
     if template.role == "effect":
         return width / 2, height / 2
@@ -222,8 +199,6 @@ def work_region(offset: Sequence[float], scale: float, size: Sequence[int], padd
     return box, [round(value, 3) for value in clipped]
 
 
-# --------------------------------------------------------------------------- key colour
-
 def key_rgb(key: str) -> tuple[int, int, int]:
     rgb = comfyui_forge_matte.DECLARED_KEYS.get(key)
     if rgb is not None:
@@ -259,16 +234,12 @@ def describe_key(key: str) -> tuple[str, str]:
     return f"flat RGB({r}, {g}, {b}) ({key})", "key"
 
 
-# --------------------------------------------------------------------------- opaque master
-
 def key_opaque_master(sheet: np.ndarray, requested: str, pixel_art: bool) -> tuple[np.ndarray, dict[str, Any]]:
     declared=None if requested=='auto' else key_rgb(requested)
     keyed,record=comfyui_forge_background_input.extract(sheet,declared,pixel_art)
     record['requested']=requested
     return keyed,record
 
-
-# --------------------------------------------------------------------------- prompt
 
 def timeline(template: ActionTemplate, duration: float, candidates: int = 3) -> list[dict[str, Any]]:
     """Independent complete demonstrations; resets are outside selectable action intervals."""
@@ -306,7 +277,8 @@ _ARTICLE = re.compile(r"^(?:a|an|the|this|one)\s+", re.I)
 
 def subject_head(subject: str) -> str:
     """The subject phrase before its first 'with/in/of/...' clause, without a leading article
-    ('side-view adventurer with a scarf' -> 'side-view adventurer'); the whole phrase when nothing is left."""
+    ('side-view adventurer with a scarf' -> 'side-view adventurer'); the whole phrase when nothing is left.
+    """
     text = " ".join(str(subject).split())
     head = _HEAD_BREAK.split(text, maxsplit=1)[0].strip()
     head = _ARTICLE.sub("", head).strip() or _ARTICLE.sub("", text).strip()
@@ -317,7 +289,8 @@ def build_prompt(template: ActionTemplate, *, subject: str, facing: str | None, 
                  region: Sequence[int], canvas: Sequence[int], root: Sequence[float], duration: float,
                  rows: Sequence[dict[str, Any]], pixel_art: bool, extra: str | None) -> str:
     """The motion prompt: identity, locked camera, key, numeric work region, root, motion,
-    timeline, body-only rule and negatives, one block per line."""
+    timeline, body-only rule and negatives, one block per line.
+    """
     key_text, key_word = describe_key(key)
     noun = {"actor": subject or "character", "object": subject or "object", "effect": subject or "game effect"}[
         template.role]
@@ -370,8 +343,6 @@ def fill_placeholders(text: str, values: dict[str, str]) -> str:
     return text
 
 
-# --------------------------------------------------------------------------- lint
-
 _NEGATORS = {"no", "not", "never", "without", "avoid", "avoids", "nor", "zero", "don't", "dont", "cannot", "neither"}
 WEAK_AMPLITUDE = ("tiny", "extremely slow", "very slow", "very fine", "very subtle", "barely", "imperceptible",
                   "nearly static", "almost static", "almost still", "slow motion", "slow-motion",
@@ -403,7 +374,8 @@ def _find(text: str, phrases: Sequence[str]) -> list[tuple[str, int]]:
 
 def lint_prompt(text: str, key: str | None = None) -> list[dict[str, str]]:
     """Warnings for wording that weakens or breaks an image-to-video take (hd2d MOTION-v2: 'very fine',
-    'tiny' and 'extremely slow' made the generated motion invisible at game size)."""
+    'tiny' and 'extremely slow' made the generated motion invisible at game size).
+    """
     findings: list[dict[str, str]] = []
 
     def add(rule: str, message: str, match: str | None = None) -> None:
@@ -441,8 +413,6 @@ def lint_prompt(text: str, key: str | None = None) -> list[dict[str, str]]:
     return findings
 
 
-# --------------------------------------------------------------------------- review guide
-
 def review_guide(rgb: np.ndarray, region: Sequence[int], root: Sequence[float], margin: float) -> Image.Image:
     """input.png with the margin, the work region and the root drawn on it (never send it to the provider)."""
     image = Image.fromarray(rgb, "RGB")
@@ -458,8 +428,6 @@ def review_guide(rgb: np.ndarray, region: Sequence[int], root: Sequence[float], 
     return image
 
 
-# --------------------------------------------------------------------------- commands
-
 def _ascii(text: Any) -> str:
     return comfyui_forge_core.ascii_text(str(text))
 
@@ -473,7 +441,6 @@ def needs_background_keying(pixels, requested="auto"):
         return False  # meaningful transparency is preserved, including translucent subjects
     estimate=comfyui_forge_background_input.estimate(pixels)
     return estimate['valid']
-
 
 
 def key_preflight(view, requested):
@@ -788,8 +755,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2; refused input and failed placement QC exit 1 with ``error: ...``; anything
-    unexpected prints ``error: internal error (...)`` (D26, D27; forge_core.run_cli)."""
     return comfyui_forge_core.run_cli(_run, argv)
 
 

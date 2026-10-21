@@ -1,4 +1,3 @@
-"""Offline contracts for first-use recommendations, reuse and workflow arithmetic."""
 import importlib.util
 import json
 from pathlib import Path

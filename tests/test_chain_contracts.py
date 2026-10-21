@@ -1,4 +1,3 @@
-"""Follow serialized retime output through the standard delivery path and validation."""
 import json,sys,unittest,copy
 from unittest.mock import patch
 from PIL import Image
@@ -11,7 +10,7 @@ import test_workflow_improvements as fixtures
 import comfyui_forge_retime as retime
 import comfyui_forge_animation_spec as spec
 import comfyui_forge_finalize_animation as finalizer
-import comfyui_forge_schema as schema
+import contract_schema as schema
 import comfyui_forge_animation_review as reviewer
 import comfyui_forge_gait_loop as cycle
 import comfyui_forge_media as media
@@ -35,7 +34,7 @@ class ChainTests(unittest.TestCase):
                     self.assertEqual(len(review['sourceIndices']),8)
                     self.assertIn('signal.ready',[e['name'] for e in review['timing']['events']])
                     finalizer.approve(case.root/'review',case.root/'delivery','Verified complete serialized test chain')
-                    schemas=schema.SchemaSet(ROOT/'shared/schemas')
+                    schemas=schema.SchemaSet(ROOT/'tests/schemas')
                     document=json.loads(selection.read_text());self.assertEqual(schemas.errors(document,'video.schema.json#/$defs/frame_selection_v2'),[])
                 finally:case.tearDown()
 

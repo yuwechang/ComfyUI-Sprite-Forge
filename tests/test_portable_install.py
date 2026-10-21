@@ -1,4 +1,3 @@
-"""Install into a temporary mock Codex home, without touching the real installation."""
 import json
 import os
 from pathlib import Path

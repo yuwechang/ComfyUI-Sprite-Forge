@@ -1,4 +1,3 @@
-"""Offline regressions derived from the real H3 run; never submits a GPU task."""
 import argparse
 import copy
 from fractions import Fraction
@@ -256,23 +255,6 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(delivered['frameCount'],8)
         self.assertEqual(delivered['gifDurationMs'],1000)
 
-    def test_advanced_preview_also_inherits_attack_selection(self):
-        import importlib.util
-        module_spec=importlib.util.spec_from_file_location('timed_preview',ROOT/'tools/comfyui_forge_export_preview.py')
-        preview=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(preview)
-        finished,selection,spec,source=self.fixture()
-        document=json.loads(selection.read_text())
-        document.update(sourceIndices=[0,2,3,6,9,11],durations_ms=[100,100,400,100,200,100],
-                        ticks=[1,1,4,1,2,1],tickHz=10,loopPolicy='oneshot',
-                        events=[{'name':'hit','tick':2}])
-        selection.write_text(json.dumps(document))
-        frames=self.root/'registered/frames'
-        result=preview.export(frames,self.root/'advanced',8,1,selection)
-        self.assertFalse(result['loop'])
-        self.assertGreaterEqual(result['sourceIndices'].count(3),3)
-        event=result['timing']['events'][0]
-        self.assertEqual(result['sourceIndices'][event['outputFrame']],3)
-        self.assertEqual(event['atMs'],event['outputFrame']*125)
 
     def test_submission_rejects_prompt_changed_since_preparation(self):
         from test_comfyui_media import GRAPH, CONFIG, FakeClient

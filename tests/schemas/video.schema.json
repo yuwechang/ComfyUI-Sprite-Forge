@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "video.schema.json",
+  "$defs": {
+    "videoEvent": {
+      "type": "object",
+      "required": [
+        "name",
+        "atMs"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "common.schema.json#/$defs/eventName"
+        },
+        "atMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "data": true
+      }
+    },
+    "frame_selection_v2": {
+      "type": "object",
+      "required": [
+        "schema",
+        "sourceDirectory",
+        "sourceHashes",
+        "start",
+        "endExclusive",
+        "status"
+      ],
+      "properties": {
+        "schema": {
+          "enum": [
+            "forge-frame-selection/v1",
+            "forge-frame-selection/v2"
+          ]
+        },
+        "sourceDirectory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceHashes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          }
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endExclusive": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sourceIndices": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "durations_ms": {
+          "$ref": "common.schema.json#/$defs/durationsMs"
+        },
+        "fps": {
+          "$ref": "common.schema.json#/$defs/fpsValue"
+        },
+        "loopPolicy": {
+          "enum": [
+            "cycle",
+            "oneshot"
+          ]
+        },
+        "impactMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "holdMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/videoEvent"
+          }
+        },
+        "cadenceMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "strideWorldUnits": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewReason": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceFiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "kind": {
+          "enum": [
+            "cycle",
+            "oneshot-return",
+            "oneshot-hold"
+          ]
+        },
+        "motionType": {
+          "enum": [
+            "cycle",
+            "oneshot-return",
+            "oneshot-hold"
+          ]
+        },
+        "cycles": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "confidence": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "overall": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "seam": {
+          "$ref": "common.schema.json#/$defs/seamReport"
+        },
+        "ticks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "tickHz": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 60
+        },
+        "speedRef": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "stridePxPerFrame": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "entryFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suggestedContact": {
+          "type": "object",
+          "required": [
+            "outputFrame",
+            "sourceIndex",
+            "atMs",
+            "method"
+          ],
+          "properties": {
+            "outputFrame": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sourceIndex": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "atMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "score": {
+              "type": "number"
+            },
+            "method": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "origin": {
+          "type": "object",
+          "properties": {
+            "sourceDirectory": {
+              "type": "string",
+              "minLength": 1
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "endExclusive": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sourceIndices": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "selection": {
+              "$ref": "common.schema.json#/$defs/fileRef"
+            },
+            "transforms": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "schema": {
+            "const": "forge-frame-selection/v2"
+          }
+        },
+        "required": [
+          "schema"
+        ]
+      },
+      "then": {
+        "required": [
+          "sourceIndices",
+          "durations_ms",
+          "loopPolicy",
+          "events",
+          "method"
+        ]
+      },
+      "else": {
+        "required": [
+          "fps"
+        ]
+      }
+    }
+  }
+}

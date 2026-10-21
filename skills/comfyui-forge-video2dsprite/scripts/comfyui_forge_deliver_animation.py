@@ -1,8 +1,4 @@
-"""Deliver already selected/finished PNG frames, sheet, GIF and source MP4 only.
-
-No generation, selection, keying, registration or resizing is performed here.
-JSON receipts stay at --report in the working directory, outside the delivery.
-"""
+"""Deliver already selected/finished PNG frames, sheet, GIF and source MP4 only."""
 import comfyui_forge_contracts
 import argparse
 from fractions import Fraction

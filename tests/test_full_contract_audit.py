@@ -1,4 +1,3 @@
-"""Cross-stage failure regressions from the full project audit; offline only."""
 import copy,json,sys,unittest
 from fractions import Fraction
 from pathlib import Path

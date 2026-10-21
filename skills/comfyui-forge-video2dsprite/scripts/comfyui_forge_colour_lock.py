@@ -1,35 +1,5 @@
 #!/usr/bin/env python3
-"""Colour lock: keep every design colour of a generated clip on the master still's colours (OKLab).
-
-Image-to-video models drift colours from frame to frame: leather boots turn olive in one frame and
-maroon in the next, a moving hand picks up a pink tint from the key. The lock works on finished
-(or registered) straight-alpha RGBA frames and changes chroma (OKLab a, b) only, never lightness,
-so the HD shading is kept and nothing is posterised:
-
-  1. Master colours by height: the master's solid interior is cut into five overlapping height
-     bands (feet to head) and each band gets its own OKLab k-means colours, so a boot pixel can
-     only match boot-height colours and a hand only colours found at hand height.
-  2. Matching: every visible pixel of a frame takes the nearest master colour of its own band and
-     the neighbouring bands; it is locked fully within 0.6 x MATCH of it, not at all beyond MATCH.
-     Its offset is its chroma minus that colour's chroma.
-  3. Local lock: each pixel's offset is averaged over the pixels matched to the same master colour
-     within 3% of the body height (normalized box filter) and that local drift is removed: a
-     whole boot that turned maroon comes back while the other boot, the leggings next to it and
-     the fine texture stay as they are.
-  4. Snap: pixels still within SNAP of their master colour are pulled part of the way to its
-     chroma (soft, at most SNAP_STRENGTH); farther pixels are left alone. The lock never adds
-     more than max(0.02, half the pixel's own chroma), so a grey never turns brown.
-  5. Temporal smoothing: a pixel whose source colour and opacity barely changed since the last
-     frame keeps half of the last output's chroma (no shimmer on still parts; moving parts are
-     never blended, so there is no ghosting). Cycles are warmed up from the last frame.
-
-measure() gives the before/after numbers: hue flips per frame pair (pixels of similar lightness
-whose chroma jumps by more than 0.03) and the per-region spread of the mean chroma across frames.
-
-  python comfyui_forge_colour_lock.py measure --frames DIR [DIR ...] --master master.png [--loop]
-
-Library: master_colours(), lock_frames(), measure(). comfyui_forge_finish_frames.py --colour-lock calls it.
-"""
+"""Colour lock: keep every design colour of a generated clip on the master still's colours (OKLab)."""
 from __future__ import annotations
 
 import argparse
@@ -81,8 +51,6 @@ class ColourLockError(ValueError):
     """A user-facing refusal."""
 
 
-# --------------------------------------------------------------------------- body bands
-
 def _rgba(image: Any) -> np.ndarray:
     if isinstance(image, (str, Path)):
         return np.asarray(comfyui_forge_core.load_rgba(Path(image))[0], np.uint8)
@@ -131,7 +99,8 @@ class MasterColours:
 
 def master_colours(master: Any, *, per_band: int = BAND_COLOURS, seed: int = 0) -> MasterColours:
     """Learn the master's colours per height band from its solid interior (alpha >= 250, one px in from the
-    edge, so edge mixes with the backdrop do not count). An opaque master is refused: key it first."""
+    edge, so edge mixes with the backdrop do not count). An opaque master is refused: key it first.
+    """
     pixels = _rgba(master)
     alpha = pixels[..., 3]
     if (alpha == 255).all():
@@ -211,8 +180,6 @@ def _box(values: np.ndarray, radius: int) -> np.ndarray:
     return out
 
 
-# --------------------------------------------------------------------------- the lock
-
 REGION_PRIOR = 2.0          # px of zero offset mixed into every local average (few matched px: little change)
 
 
@@ -220,7 +187,8 @@ def _region_offsets(shape: tuple[int, int], visible: np.ndarray, index: np.ndarr
                     offset: np.ndarray, radius: int) -> np.ndarray:
     """The local mean chroma offset of every visible pixel among the pixels matched to the same master
     colour within ``radius`` px (normalized box filter per colour, so a boot's drift is averaged over that
-    boot only, never with the neighbouring bracer or leggings)."""
+    boot only, never with the neighbouring bracer or leggings).
+    """
     height, width = shape
     ys, xs = np.nonzero(visible)
     smooth = np.zeros((len(ys), 2))
@@ -280,7 +248,8 @@ def lock_frames(frames: Sequence[np.ndarray], master: Any, *, strength: float = 
     """Lock straight-alpha RGBA frames (one canvas) to the master colours; alpha and lightness never change.
 
     ``master`` is master_colours() (or plain OKLab centres). ``loop``: a cycle, so frame 0's temporal
-    smoothing is seeded from the last frame."""
+    smoothing is seeded from the last frame.
+    """
     master = _as_master(master)
     if not frames:
         return [], {"frames": 0}
@@ -324,8 +293,6 @@ def lock_frames(frames: Sequence[np.ndarray], master: Any, *, strength: float = 
     return out, stats
 
 
-# --------------------------------------------------------------------------- measurement
-
 def measure(frames: Sequence[np.ndarray], master: Any, *, loop: bool = False,
             min_share: float = 0.005) -> dict[str, Any]:
     """Colour flicker of RGBA frames against the master colours.
@@ -336,7 +303,8 @@ def measure(frames: Sequence[np.ndarray], master: Any, *, loop: bool = False,
     ``min_share`` of the solid pixels in at least half the frames, the RMS distance of the region's
     per-frame mean chroma from its mean over the clip; the mean, the worst value and the worst regions
     are reported. ``foreignShare``: mean share of solid pixels farther than 2 x MEASURE_MATCH from every master
-    colour of their band (bleed, tints and colours the design does not have)."""
+    colour of their band (bleed, tints and colours the design does not have).
+    """
     master = _as_master(master)
     labs, solids, regions = [], [], []
     for frame in frames:
@@ -406,7 +374,8 @@ def foreign_drift(frame: np.ndarray, master: Any) -> dict[str, float]:
     FOREIGN_CHROMA and at least FOREIGN_AB in (a, b) from every master colour of the pixel's band and the
     neighbouring bands (purple or green bleed on boots, a pink hand, a cyan blade); lightness is ignored, so
     shading never counts. ``drift``: the largest mean chroma offset of a master colour region holding at least
-    DRIFT_MIN_SHARE of the solid pixels (a whole part shifted, which lock_frames undoes)."""
+    DRIFT_MIN_SHARE of the solid pixels (a whole part shifted, which lock_frames undoes).
+    """
     master = _as_master(master)
     frame = np.asarray(frame)
     solid = frame[..., 3] >= FOREIGN_ALPHA
@@ -437,8 +406,6 @@ def foreign_drift(frame: np.ndarray, master: Any) -> dict[str, float]:
         drift = float(np.sqrt((sums_a[big] / counts[big]) ** 2 + (sums_b[big] / counts[big]) ** 2).max())
     return {"foreign": round(foreign, 5), "drift": round(drift, 5)}
 
-
-# --------------------------------------------------------------------------- CLI
 
 def _frames_of(folder: Path) -> list[np.ndarray]:
     if (folder / "frames").is_dir():
@@ -475,7 +442,6 @@ def _run(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Usage errors exit 2; refused input exits 1 with error: ... (forge_core.run_cli)."""
     return comfyui_forge_core.run_cli(_run, argv)
 
 

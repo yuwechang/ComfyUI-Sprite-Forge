@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only check of the sole local ComfyUI provider; never inspects credentials."""
+"""Check local ComfyUI readiness and report installed paths and versions."""
 import argparse
 import json
 import hashlib

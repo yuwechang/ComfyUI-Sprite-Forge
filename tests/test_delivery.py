@@ -1,4 +1,3 @@
-"""The delivery ZIP contains only selected frames, sheet, preview and source."""
 import json
 from pathlib import Path
 import sys

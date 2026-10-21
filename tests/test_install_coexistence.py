@@ -1,4 +1,3 @@
-"""The fork must never replace original Sprite Forge skills or its manifest."""
 import hashlib
 import contextlib
 import io

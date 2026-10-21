@@ -1,4 +1,3 @@
-"""The shipped programs must remain a self-contained video-to-sprite pipeline."""
 import ast
 import contextlib
 import io
@@ -39,8 +38,15 @@ class VideoPipelineScopeTests(unittest.TestCase):
                 parser.parse_args([command])
         folder=ROOT/'skills/comfyui-forge-video2dsprite'
         for path in ('scripts/comfyui_forge_engine_export.py','scripts/comfyui_forge_validate_animation.py',
-                     'references/runtime','references/packed-alpha-runtime.js'):
-            self.assertFalse((folder/path).exists())
+                     'references/runtime','references/packed-alpha-runtime.js',
+                     'scripts/comfyui_forge_schema.py','references/schemas'):
+            target=folder/path
+            self.assertFalse(target.is_file() or (target.is_dir() and any(target.iterdir())))
+
+    def test_contract_validator_is_test_only_and_obsolete_preview_entry_is_absent(self):
+        self.assertTrue((ROOT/'tests/contract_schema.py').is_file())
+        self.assertFalse((ROOT/'shared/comfyui_forge_schema.py').exists())
+        self.assertFalse((ROOT/'tools/comfyui_forge_export_preview.py').exists())
 
 
 if __name__=='__main__':unittest.main()
