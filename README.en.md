@@ -35,15 +35,9 @@ No ComfyUI workflow is bundled. Bring your own API JSON that already generates v
 
 ### FFmpeg installation (Windows)
 
-This skill requires FFmpeg and FFprobe to process video.
+This skill requires FFmpeg and FFprobe to process video. Copy this sentence into your Codex:
 
-If they are not installed yet, you can get a Windows build from:
-
-`https://www.gyan.dev/ffmpeg/builds/`
-
-If you are unfamiliar with the installation process, give the URL above to Codex and ask it to help install the tools, configure PATH, and verify that both FFmpeg and FFprobe run correctly.
-
-If they are already installed, there is no need to install them again.
+> Please check whether FFmpeg and FFprobe are installed and run correctly on my Windows computer, download and install any missing tools from https://www.gyan.dev/ffmpeg/builds/, configure PATH, and verify that both run correctly without reinstalling tools that are already installed.
 
 ## How to install
 

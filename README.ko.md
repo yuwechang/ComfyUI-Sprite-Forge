@@ -35,15 +35,9 @@ ComfyUI 워크플로는 포함되어 있지 않습니다. 영상 생성이 정�
 
 ### FFmpeg 설치（Windows）
 
-이 스킬은 영상 처리를 위해 FFmpeg와 FFprobe가 필요합니다.
+이 스킬은 영상 처리를 위해 FFmpeg와 FFprobe가 필요합니다. 아래 문장을 Codex에 붙여넣으세요:
 
-아직 설치하지 않았다면 다음 사이트에서 Windows 버전을 받을 수 있습니다.
-
-`https://www.gyan.dev/ffmpeg/builds/`
-
-설치 방법을 잘 모른다면 위 URL을 Codex에 전달하고 설치, PATH 설정, FFmpeg와 FFprobe의 정상 실행 확인을 요청하세요.
-
-이미 설치되어 있다면 다시 설치할 필요가 없습니다.
+> 내 Windows 컴퓨터에 FFmpeg와 FFprobe가 설치되어 정상적으로 실행되는지 확인하고, 설치되지 않은 도구는 https://www.gyan.dev/ffmpeg/builds/ 에서 다운로드하여 설치하고 PATH를 설정한 뒤 두 도구가 모두 정상적으로 실행되는지 확인해 주세요(이미 설치된 도구는 다시 설치할 필요가 없습니다).
 
 ## 설치 방법
 

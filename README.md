@@ -35,15 +35,9 @@
 
 ### FFmpeg 安裝（Windows）
 
-本 Skill 需要 FFmpeg 和 FFprobe 來處理影片。
+本 Skill 需要 FFmpeg 和 FFprobe 來處理影片，把下面這句話貼給你的 Codex：
 
-如果尚未安裝，可以從以下網站取得 Windows 版本：
-
-`https://www.gyan.dev/ffmpeg/builds/`
-
-不熟悉安裝方式的話，可以直接把上面的網址交給 Codex，請它協助安裝、設定 PATH，並確認 FFmpeg 和 FFprobe 都能正常執行。
-
-如果已經安裝，就不需要重複安裝。
+> 請檢查我的 Windows 電腦是否已安裝且能正常執行 FFmpeg 和 FFprobe，若尚未安裝，請從 https://www.gyan.dev/ffmpeg/builds/ 下載並協助安裝、設定 PATH，再確認兩者都能正常執行，已安裝的工具不需重複安裝。
 
 ## 怎麼安裝？
 
