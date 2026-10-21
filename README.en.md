@@ -24,8 +24,6 @@ The result is **128×128, 8 frames at 8 fps, looping for 1 second**. Transparent
 
 ![Eight-frame transparent running sprite sheet](examples/sample-character-run-spritesheet.png)
 
-To try it, tell Codex: “Use examples/sample-character.png from this project to create a run cycle with the settings above.” See [examples/README.md](examples/README.md) for asset notes.
-
 ## What you need first
 
 1. **Codex**, with access to local files and tools.

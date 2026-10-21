@@ -24,8 +24,6 @@
 
 ![8프레임 투명 달리기 스프라이트 시트](examples/sample-character-run-spritesheet.png)
 
-테스트하려면 Codex에 “이 프로젝트의 examples/sample-character.png로 위 설정에 맞는 달리기 루프를 만들어 주세요”라고 요청하세요. 소재 안내는 [examples/README.md](examples/README.md)를 참고하세요.
-
 ## 먼저 준비할 것
 
 1. **Codex**: 로컬 파일을 읽고 도구를 실행할 수 있어야 합니다.

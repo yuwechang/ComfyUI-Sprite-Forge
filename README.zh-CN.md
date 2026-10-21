@@ -24,8 +24,6 @@
 
 ![8帧透明跑步图集](examples/sample-character-run-spritesheet.png)
 
-想试跑时，对 Codex 说：“使用项目 examples/sample-character.png，制作上述规格的跑步循环。”素材说明见 [examples/README.md](examples/README.md)。
-
 ## 先准备这两样
 
 1. **Codex**：可以读取你电脑上的文件、执行工具。

@@ -24,8 +24,6 @@
 
 ![8フレームの透過スプライトシート](examples/sample-character-run-spritesheet.png)
 
-試すときは Codex に「このプロジェクトの examples/sample-character.png を使い、上記の設定で走るループを作ってください」と伝えてください。素材については [examples/README.md](examples/README.md) をご覧ください。
-
 ## 最初に必要なもの
 
 1. **Codex**：ローカルファイルを読み、ツールを実行できること。
