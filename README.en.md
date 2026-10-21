@@ -79,7 +79,3 @@ The longer source provides multiple complete action candidates to choose from; f
 - [Attribution and changes](NOTICE.md)
 
 These detailed guides are currently written in Traditional Chinese; you can ask Codex to explain them in your language.
-
-Use the included test image or provide your own character image. Still-image generation is not configured. Check the sources and licenses of your models and third-party nodes yourself.
-
-The source code, modifications, and images and animations in examples/ are all licensed under the [MIT License](LICENSE).

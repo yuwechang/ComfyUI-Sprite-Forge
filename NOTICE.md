@@ -1,30 +1,35 @@
-# Attribution and scope / 原作者與修改說明
+# 原作者與修改說明
 
-本專案是 **Agent Sprite Forge 的非官方修改版**，不是原作者發行的版本。
+## 來源與授權
 
-- 上游專案：https://github.com/0x0funky/agent-sprite-forge
-- 上游 LICENSE：https://github.com/0x0funky/agent-sprite-forge/blob/main/LICENSE
-- 上游版權聲明：Copyright (c) 2026 0x0funky
-- 授權：MIT；完整上游文字保留於根目錄 LICENSE。
-- 本修改版的修改與範例素材：Copyright (c) 2026 yuwechang，同樣採用MIT授權；涵蓋examples/內的角色原圖、PNG圖集及GIF動畫。
-- 本地修改起點的既有紀錄：`5324342fdfab72430f4e9604f3fe427009f8596d`。此值來自本專案前身的修改紀錄，不表示本發佈資料夾具備完整上游 Git 歷史。
+本專案是基於 [Agent Sprite Forge](https://github.com/0x0funky/agent-sprite-forge) 修改的非官方版本。
 
-本修改版保留上游的主要離線素材處理程式及相關 references，加入或調整：
+- 原作者：0x0funky，Copyright (c) 2026 0x0funky。
+- 本版修改與範例素材：yuwechang，Copyright (c) 2026 yuwechang。
+- 專案原始碼、本版修改及 `examples/` 中提供的角色原圖、PNG 圖集與 GIF 動畫均採用 MIT 授權，完整條款與版權聲明見 [LICENSE](LICENSE)。
+- 範例素材說明見 [examples/README.md](examples/README.md)。
 
-1. 唯一本機 ComfyUI 圖生影片 provider、job.json 續取與結果校驗。
-2. 移除雲端 API provider、API key 設定與 CLI 生成後備路由。
-3. 三個角色動畫核心的 `comfyui-forge-*` 獨立技能名稱、資料夾、UI metadata與安裝 manifest，支援與原版並存。
-4. 本機 workflow bindings、可攜式設定尋找及完整 sibling skills 安裝。
-5. 來源24fps、請求時間依成品2-3倍且不超過15秒、固定解析度選項與本機動畫處理指引。
-6. 本發佈版的安裝、工作流映射、測試與繁體中文文件。
-7. 通用動作首幀評估、動作留白、共同尺度、位移歸屬、階段銜接、局部微動及視覺驗收指引。
+## 本版修改範圍
 
-本修改版不附上游歷史技術文件，也不代表保留所有上游功能或已重現其歷史驗證。此次發佈未附上游展示圖片／影片、個人安裝報告、模型權重或執行環境。examples/ 另包含維護者提供的角色測試圖片與成品，素材說明見 examples/README.md。
+本版專注於本機 ComfyUI 角色動畫製作，包含三個技能：
 
-本儲存庫的原始碼、維護者修改及examples/內提供的圖片與動畫均採用MIT授權，保留各自的版權聲明。未隨專案提供的ComfyUI、Python套件、ffmpeg、模型、第三方custom nodes，以及使用者另外提供或生成的內容，仍依各自適用的授權；本專案不替它們提供額外授權。本專案不附可執行工作流或模型；使用者應自行準備工作流並確認其模型與節點來源、授權。
+| 技能 | 用途 |
+|---|---|
+| `comfyui-forge-generate2dmedia` | 本機 ComfyUI 圖生影片、工作流檢查與任務續接。 |
+| `comfyui-forge-generate2dsprite` | 角色參考圖片的檢查、去背與輸入準備。 |
+| `comfyui-forge-video2dsprite` | 影片轉透明動畫、動作選格、節奏調整與成品交付。 |
 
-規格引導更新：提供離線規格計算、三檔來源建議、本機偏好保存、共享影格對齊及乾淨標準交付工具；規格確認與交付文字依使用者語言呈現。
+相較於上游，本版的主要調整包括：
 
-範圍精簡：本修改版移除地圖與程式繪圖模組及其專屬依賴，只保留本機ComfyUI影片生成與角色素材處理的三個核心技能。地圖與程式繪圖可使用獨立安裝的原版；本修改版不覆蓋原版目錄或manifest。
+- 影片生成統一使用本機 ComfyUI，移除雲端 API、API key 設定與 CLI 生成後備路由。
+- 使用獨立技能名稱、目錄與安裝紀錄，支援與原版並存。
+- 提供使用者工作流的節點對應、設定路徑解析，以及生成任務續接與結果校驗。
+- 加入規格規劃、影格對齊與專案偏好保存，依使用者語言確認規格與說明結果。
+- 加入動作首圖評估、構圖留白、共同角色尺度、位移處理、動作驗收與重試決策。
+- 依完整動作選格、調整播放節奏並保留重要姿勢，於最終成品尺寸檢查預覽與驗收。
+- 標準交付為透明 PNG 影格、透明 PNG 圖集、GIF 預覽及來源 MP4，整理為 ZIP。
+- 提供安裝與工作流設定文件、離線測試，以及繁體中文、簡體中文、英文、日文、韓文 README；其餘說明文件目前主要為繁體中文。
 
-進一步精簡：移除獨立靜態圖集／圖示工具與額外引擎傳輸及runtime；輸入參考準備、影片處理、視覺選段、循環、重定時、定位、調色與標準交付仍由本專案自行提供。
+本版不包含上游的地圖、程式繪圖、獨立靜態圖集／圖示處理及額外引擎傳輸與 runtime 功能，也未設定靜態圖片生成。工作流與模型由使用者自行準備。
+
+ComfyUI、Python 套件、FFmpeg、模型、第三方節點，以及使用者另外提供或生成的內容，依各自適用的授權辦理。

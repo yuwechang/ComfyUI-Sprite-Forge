@@ -1,100 +1,64 @@
-# 接入自己的本機 H3 workflow
+# 本機 H3 工作流設定
 
-## 支援範圍
+## 工作流格式
 
-此 adapter 會上傳首圖、可選尾圖，將提示詞、寬高、總影格數與 fps 寫入指定節點，提交到本機 `/prompt`，輪詢 `/history/{prompt_id}`，再由 `/view` 下載 MP4。它不會操作 ComfyUI 畫布 UI，也不會替你安裝模型。
+使用已能在本機 ComfyUI 執行的 **Export (API) JSON**。頂層以字串節點 ID 為鍵，每個節點包含 `class_type` 與 `inputs`；含頂層 `nodes`、`links` 的畫布格式不適用。
 
-你的工作流須已能在 ComfyUI 正常執行。不同 custom node 版本、wrapper、音訊分支與模型封裝可能有不同限制。**可設定 bindings 不等於支援任意 JSON**：不支援的結構需要修改 workflow 副本或 adapter，並再次測試。
+adapter 上傳首圖與可選尾圖，依設定寫入節點輸入，透過 `/prompt` 提交、`/history/{prompt_id}` 查詢結果，再由 `/view` 下載 MP4。
 
-## 1. 匯出 API 格式
+## 設定欄位
 
-從你的 ComfyUI 匯出 **Export (API)** JSON（不同版本可能需先開啟開發者選項）。有效格式大致如下：
+以 [config.example.json](../local-comfyui/config.example.json) 建立 `local-comfyui/config.local.json`，依實際工作流填入下列欄位。
 
-```json
-{
-  "11": { "class_type": "LoadImage", "inputs": { "image": "first.png" } },
-  "7": { "class_type": "PrimitiveStringMultiline", "inputs": { "value": "prompt" } }
-}
-```
+所有節點對應使用 `["節點 ID", "input 名稱"]`，節點 ID 為字串。
 
-這只是兩個節點的格式示意，不是可生成影片的完整 workflow。一般 UI 格式含頂層 `nodes`、`links`，adapter 會拒絕。
-
-可以將真正 API JSON 留在使用者原資料夾，或另存 `local-comfyui/workflow.local.json`。個人模型檔名與路徑可能不適合公開；此檔預設被 Git 忽略。
-
-## 2. 建立設定
-
-先複製 config.example.json 成 config.local.json。本專案不附可執行 workflow。以下 ID 只是設定格式示意，**需要換成你的實際節點 ID 與 inputs 名稱**：
-
-```json
-{
-  "url": "http://127.0.0.1:8188",
-  "workflow": "workflow.local.json",
-  "output_node": "48",
-  "fps": 24,
-  "frame_multiple": 17,
-  "frame_offset": 5,
-  "bindings": {
-    "image": ["11", "image"],
-    "prompt": ["7", "value"],
-    "width": ["349", "width"],
-    "height": ["349", "height"],
-    "length": ["349", "length"],
-    "fps": ["48", "frame_rate"],
-    "last_image": ["12", "image"]
-  },
-  "last_frame_input": ["349", "last_frame"]
-}
-```
-
-`workflow.local.json` 依 **config.local.json 的資料夾**解析，不依 shell 工作目錄。也可以使用自己的絕對路徑。Windows JSON 的反斜線必須寫成 `\\`，或改用 `/`。
-
-| 欄位 | 如何找你的值 |
+| 欄位 | 設定依據 |
 |---|---|
-| `url` | 本機 ComfyUI API 位址。只允許 HTTP 的 127.0.0.1、localhost 或 ::1；可換本機 port，不支援遠端／雲端 URL、登入憑證、proxy 或 redirect。 |
-| `output_node` | 實際輸出 MP4 的節點 ID，不是 sampler 或 latent 節點。範例是 VHS_VideoCombine，format 為 video/h264-mp4，save_output=true。 |
-| `bindings.image` | LoadImage 的節點 ID 與 `image` input。adapter 上傳後會換成 ComfyUI 回傳的檔名。 |
-| `bindings.prompt` | 寫入文字的節點 ID 與 input 名稱。例如 primitive 的 value，或 CLIPTextEncode 的 text。 |
-| `bindings.width/height` | 真正供 latent／H3 圖生影片節點使用的寬高 input。adapter 會覆寫該 input 的數值，即使原本是連線。 |
-| `bindings.length` | 接受**總影格數**的 input，不是秒數或單純 batch size。若你的節點只收秒數，需先改 workflow 或 adapter。 |
-| `bindings.fps` | 可選，輸出合成器的 fps input。若省略，請在 workflow 自行固定成與設定 fps 相同的值。 |
-| `last_image` / `last_frame_input` | 可選，尾圖 loader 的 image input，以及真正消費尾圖的 input。沒用尾圖時 adapter 會移除這個消費端連線。 |
+| `url` | 本機 ComfyUI 位址，支援 HTTP 的 `127.0.0.1`、`localhost` 或 `[::1]` 與自訂 port；不支援登入憑證、proxy 或 redirect。 |
+| `workflow` | 使用者的 API JSON 路徑；相對路徑以設定檔所在資料夾解析。Windows 路徑使用 `/` 或 JSON 跳脫的 `\\`。 |
+| `output_node` | 實際輸出 MP4 的節點 ID。 |
+| `bindings.image` | 首圖 LoadImage 的 `image` input；上傳後寫入 ComfyUI 回傳的檔名。 |
+| `bindings.prompt` | 提示詞文字 input。 |
+| `bindings.width`、`bindings.height` | 實際控制生成寬高的 input；指定位置原有的連線會被數值取代。 |
+| `bindings.length` | 接收整數總影格數的 input。 |
+| `bindings.fps` | 可選，影片輸出節點的 fps input；省略時工作流須固定為 24 fps。 |
+| `bindings.last_image` | 可選，尾圖 LoadImage 的 `image` input，須搭配 `last_frame_input`。 |
+| `last_frame_input` | 實際接收尾圖的節點與 input；未提供尾圖時 adapter 移除此處連線。無尾圖功能時省略此欄位與 `bindings.last_image`。 |
+| `bindings.seed` | 可選，亂數種子的節點與 input；省略時自動尋找輸出分支的 `seed`／`noise_seed`，包含其上游連線。 |
+| `fps`、`frame_multiple`、`frame_offset`、`frame_minimum` | 固定為 `24`、`17`、`5`、`5`；省略時採用這些值。 |
+| `planning.minimum_source_size` | 可選，工作流已驗證的最低輸入尺寸 `[寬, 高]`，供規格工具檢查。 |
+| `planning.dimension_multiple` | 可選，規格工具的尺寸對齊倍數，預設 `32`；輸入圖仍須符合 adapter 的 32 倍數限制。 |
 
-沒有尾圖功能時，**同時刪掉 bindings.last_image 與 last_frame_input**，也不要使用 --last-frame。節點的 ID 一律為字串，例如 `"349"`。
+## 影格與尺寸限制
 
-來源影格數統一使用 `min(345, max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17)`，a 是不超過15的正數秒數，可為小數。來源固定24fps，總影格為5、22、39、56、73……，最多345幀（14.375秒），確保對齊後實際時長也不超過15秒；不接受其他fps或對齊規則。
+來源固定 24 fps，請求時長 `a` 為大於 0、最多 15 秒的數值。總影格數計算如下，`round` 使用 Python 的四捨六入、正中間取偶數規則：
 
-目前工具仍要求輸入圖寬高為32的倍數。先等比例縮放角色並留背景空間，再送入；不要將角色硬拉到另一個長寬比。已記錄 registration_job 的輸入若改尺寸，需要重新準備登錄資料。
-
-## 3. 確認輸出與節點
-
-adapter 只提交 output_node 的祖先節點，捨棄不相連的 UI helper。不會重命名模型或自動修復節點。`--check` 比較執行分支的 class_type，並檢查部分已知模型欄位的本機選項；其他 custom node 的模型欄位不一定被此檢查涵蓋。
-
-目前輸出必須在指定節點的 history output 中，以 gifs/videos/images 列表回傳含 filename/subfolder/type 的 **.mp4**。如果自己的 SaveVideo 節點使用不同 history 結構、只回傳 .webm、包含多個影片或只顯示預覽，需改用相容 MP4 輸出或修改 adapter；此版本下載第一個符合的 MP4。
-
-帶身份驗證的 API node 或遠端生成節點不符合本專案本機生成的定位。custom nodes 的網路行為由你自己的 ComfyUI 管理，adapter 的 loopback 限制不是全系統網路防火牆。
-
-## 4. 安裝與唯讀驗證
-
-```powershell
-.\.venv\Scripts\python.exe tools/comfyui_forge_install_skills.py --apply --host codex --config local-comfyui/config.local.json
-.\.venv\Scripts\python.exe skills/comfyui-forge-generate2dmedia/scripts/comfyui_forge_media.py --check
-.\.venv\Scripts\python.exe skills/comfyui-forge-generate2dmedia/scripts/comfyui_forge_route_media.py video --route comfyui --reference input.png --prompt-file prompt.txt --duration 3 --out-dir outputs/first-take --dry-run
+```text
+n = max(5, round(a * 24))
+frames = min(345, n + (5 - n % 17) % 17)
 ```
 
-input.png 與 prompt.txt 必須是你提供或準備的實際檔案。--dry-run 不連線、不建立輸出資料夾，--check 會讀取本機 API 但不生成。通過後，只有你要求實測生成時才移除 --dry-run。
+總影格數符合 `17k + 5`，最多 345 幀，實際最長 14.375 秒。`bindings.length` 直接接收此數值。
 
-## 可以交給朋友的 Codex 的提示詞
+輸入圖寬高須為 32 的倍數，並符合工作流的最低尺寸。變更已登錄輸入圖的尺寸後，須重新準備 `registration_job`。
 
-> 我的 ComfyUI 已能正常執行這份 H3 API workflow：〈我的 JSON 路徑〉。請讀取 docs/WORKFLOW.md，建立此專案的 config.local.json，找出首圖、提示詞、寬高、總影格、fps與MP4輸出節點。保留原始 JSON；不相容時先說明需要調整的節點。安裝三個核心 skills，然後做 --check 與 dry-run，不要下載模型或提交 GPU 任務。
+## 輸出相容性
 
-## 初始規格工具的設定
+adapter 只提交 `output_node` 及其上游相依節點。指定輸出節點的 history 結果須在 `gifs`、`videos` 或 `images` 列表中提供含 `filename`、`subfolder`、`type` 的 `.mp4` 項目；adapter 下載第一個符合的 MP4。
 
-`comfyui_forge_animation_spec.py`與提交adapter共用固定公式。設定省略fps與對齊欄位時使用24、17、5、5；衝突設定會停止。Python round採最近整數、正中間取偶數。length綁定必須接收整數總影格，不要再當秒數乘24。
+若節點只接受秒數、輸出格式或 history 結構不同，須調整工作流副本或 adapter 後再驗證。
 
-可在私人config加入已確認的最低尺寸，例如 `"planning": {"minimum_source_size": [512, 512], "dimension_multiple": 32}`。此512只是格式示意，不是所有模型最低值；請依自己的workflow實測填寫。自訂來源fps先更新私人config並確認fps綁定與輸出一致，工具不會靜默修改原workflow。
+每個新生成任務會為找到的種子輸入寫入同一個非負整數亂數種子；沒有種子欄位則略過。特殊種子範圍或多個獨立種子需求須另行配置。續接任務沿用已提交的工作流與種子。
 
-## 每個新任務的亂數種子
+## 驗證設定
 
-提交新影片任務且工作流提供種子欄位時，adapter 會產生非負整數亂數種子，寫入實際送出的圖與 job.json。續接 pending／unknown 或重用 done 任務沿用原 submitted-workflow，不改種子、不重送。dry-run 與 --check 不產生種子。
+使用專案 `.venv` 的 Python 執行工具，`scripts` 為 `comfyui-forge-generate2dmedia` 的實際安裝目錄下的資料夾：
 
-優先使用 config 的 `bindings.seed: [node_id, input_name]`；未設定時，辨識有效輸出圖內的 `seed`／`noise_seed` 輸入，包含上游節點連線。沒有種子欄位就略過設定，照常提交；自訂欄位可用明確對應。所有找到的種子輸入使用同一任務種子，原始 workflow 不修改。若工作流使用特殊種子範圍或多個獨立種子策略，需先明確配置與驗證。
+```text
+<Python> <scripts>/comfyui_forge_media.py --check
+<Python> <scripts>/comfyui_forge_route_media.py video --route comfyui --reference <輸入圖片> --prompt-file <提示詞文字檔> --duration <請求秒數> --out-dir <工作目錄> --dry-run
+```
+
+`--check` 連線本機 API，檢查執行分支的節點類別與部分已知模型欄位選項；`--dry-run` 檢查請求，不連線、不建立輸出目錄。兩者均不生成影片，也不驗證實際畫面品質。
+
+安裝及設定路徑的更新方式見 [INSTALL.md](../INSTALL.md)。
