@@ -1,5 +1,7 @@
 # 本機 H3 工作流設定
 
+**繁體中文** | [简体中文](WORKFLOW.zh-CN.md) | [English](WORKFLOW.en.md) | [日本語](WORKFLOW.ja.md) | [한국어](WORKFLOW.ko.md)
+
 ## 工作流格式
 
 使用已能在本機 ComfyUI 執行的 **Export (API) JSON**。頂層以字串節點 ID 為鍵，每個節點包含 `class_type` 與 `inputs`；含頂層 `nodes`、`links` 的畫布格式不適用。

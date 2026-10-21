@@ -1,5 +1,7 @@
 # 使用與動畫規格
 
+**繁體中文** | [简体中文](USAGE.zh-CN.md) | [English](USAGE.en.md) | [日本語](USAGE.ja.md) | [한국어](USAGE.ko.md)
+
 ## 如何開始
 
 安裝完成後，開啟新的 Codex 對話，提供角色圖片並描述想做的動作。可以直接說：

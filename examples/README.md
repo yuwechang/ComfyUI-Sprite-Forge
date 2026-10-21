@@ -1,5 +1,7 @@
 # 測試圖片與跑步範例
 
+**繁體中文** | [简体中文](README.zh-CN.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
+
 以下素材由維護者 yuwechang 提供，供安裝後試跑與查看輸出效果：
 
 | 檔案 | 說明 |

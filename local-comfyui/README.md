@@ -1,9 +1,11 @@
-# 接入使用者自己的 ComfyUI
+# 本機 ComfyUI 設定檔
 
-這裡只有設定範本，沒有附帶工作流、模型或 ComfyUI 安裝程式。
+**繁體中文** | [简体中文](README.zh-CN.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-- `config.example.json`：連線與節點 bindings 的格式範本。節點 ID 與影格規則僅為示意，請依自己的 API JSON 調整。
-- `config.local.json`：依範本建立的個人設定，已被 Git 忽略。
-- `workflow.local.json`：可選的個人工作流存放位置，已被 Git 忽略。也可在設定中指向其他位置的 API JSON。
+本目錄提供設定範本；工作流、模型與 ComfyUI 由使用者準備。
 
-請自行準備已能正常生成影片的本機 ComfyUI 與工作流。工作流路徑相對於設定檔解析；接入方法見 [WORKFLOW.md](../docs/WORKFLOW.md)。缺少私人設定時工具會停止，不會拿範例自動生成。
+- `config.example.json`：連線與節點對應的設定格式。節點 ID 依自己的 API JSON 調整，影格規則採專案固定值。
+- `config.local.json`：由範本建立的個人設定，已被 Git 忽略。
+- `workflow.local.json`：可選的個人工作流位置，已被 Git 忽略；也可在設定中指向其他位置。
+
+工作流須已能在本機 ComfyUI 生成影片。相對工作流路徑以設定檔所在資料夾解析。完整設定方式見 [工作流設定](../docs/WORKFLOW.md)。

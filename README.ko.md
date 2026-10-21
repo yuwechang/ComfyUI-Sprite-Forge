@@ -73,9 +73,7 @@ Codex는 프로젝트 안내에 따라 필요한 노드를 확인합니다. 워�
 
 ## 자세한 안내
 
-- [전체 설치 안내](INSTALL.md): 설치를 담당하는 Codex용 절차도 포함되어 있습니다.
-- [자신의 워크플로 설정](docs/WORKFLOW.md)
-- [사용법과 애니메이션 설정](docs/USAGE.md)
-- [원작자와 변경 사항](NOTICE.md)
-
-이 상세 문서는 현재 중국어 번체로 작성되어 있습니다. Codex에 한국어 설명을 요청할 수 있습니다.
+- [전체 설치 안내](INSTALL.ko.md)
+- [자신의 워크플로 설정](docs/WORKFLOW.ko.md)
+- [사용법과 애니메이션 설정](docs/USAGE.ko.md)
+- [원작자와 변경 사항](NOTICE.ko.md)

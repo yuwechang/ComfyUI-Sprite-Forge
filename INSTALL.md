@@ -1,5 +1,7 @@
 # Codex 安裝說明
 
+**繁體中文** | [简体中文](INSTALL.zh-CN.md) | [English](INSTALL.en.md) | [日本語](INSTALL.ja.md) | [한국어](INSTALL.ko.md)
+
 ## 安裝前提
 
 - Python 3.10+、FFmpeg 與 FFprobe；檢查是否可正常執行，缺少時協助安裝。

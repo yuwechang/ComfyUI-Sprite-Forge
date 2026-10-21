@@ -73,9 +73,7 @@ Codex 会按项目说明找出需要连接的节点。不同工作流可能需�
 
 ## 想看细节？
 
-- [完整安装说明](INSTALL.md)：也供负责安装的 Codex 阅读。
-- [自己的工作流如何配置](docs/WORKFLOW.md)
-- [使用与动画规格](docs/USAGE.md)
-- [原作者与修改说明](NOTICE.md)
-
-这些详细文档目前以繁体中文编写，可以请 Codex 用你熟悉的语言解释。
+- [完整安装说明](INSTALL.zh-CN.md)
+- [自己的工作流如何配置](docs/WORKFLOW.zh-CN.md)
+- [使用与动画规格](docs/USAGE.zh-CN.md)
+- [原作者与修改说明](NOTICE.zh-CN.md)

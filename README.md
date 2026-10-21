@@ -73,7 +73,7 @@ Codex 會依專案說明找出需要連接的節點。不同工作流可能需�
 
 ## 想看細節？
 
-- [完整安裝說明](INSTALL.md)：也提供給負責安裝的 Codex 閱讀。
+- [完整安裝說明](INSTALL.md)
 - [自己的工作流如何設定](docs/WORKFLOW.md)
 - [使用與動畫規格](docs/USAGE.md)
 - [原作者與修改說明](NOTICE.md)

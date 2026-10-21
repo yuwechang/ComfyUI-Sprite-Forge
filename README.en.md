@@ -73,9 +73,7 @@ The longer source provides multiple complete action candidates to choose from; f
 
 ## More details
 
-- [Full installation guide](INSTALL.md), also intended for the Codex doing the installation.
-- [Setting up your own workflow](docs/WORKFLOW.md)
-- [Usage and animation settings](docs/USAGE.md)
-- [Attribution and changes](NOTICE.md)
-
-These detailed guides are currently written in Traditional Chinese; you can ask Codex to explain them in your language.
+- [Full installation guide](INSTALL.en.md)
+- [Setting up your own workflow](docs/WORKFLOW.en.md)
+- [Usage and animation settings](docs/USAGE.en.md)
+- [Attribution and changes](NOTICE.en.md)
