@@ -25,7 +25,7 @@ class ExcursionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'static clip'):cycle.analyse(frames,24,min_seconds=.125,max_seconds=.5)
     def test_bad_closure_is_still_rejected(self):
         from types import SimpleNamespace
-        analysis=SimpleNamespace(usable={'endExclusive':40},lengths={'minFrames':4})
+        analysis=SimpleNamespace(usable={'endExclusive':40},lengths={'minFrames':4,'maxFrames':40})
         metrics={'endExclusive':20,'frames':12,'closure_steps':1.5,'amplitude_steps':1.7,'root_drift_pct_body':0,'holds_inside':[]}
         verdict=cycle.classify_ambient(analysis,metrics)
         self.assertEqual(verdict['class'],'rejected');self.assertTrue(any('does not close' in reason for reason in verdict['reasons']))

@@ -578,6 +578,8 @@ def classify_ambient(a: Analysis, m: dict) -> dict:
                        f"({a.usable['reason']})")
     if m["frames"] < a.lengths["minFrames"]:
         reasons.append(f"{m['frames']} frames is shorter than the minimum loop of {a.lengths['minFrames']} frames")
+    if m['frames'] > a.lengths['maxFrames']:
+        reasons.append(f"{m['frames']} frames is longer than the maximum loop of {a.lengths['maxFrames']} frames")
     if m["closure_steps"] is None:
         reasons.append("reaches the clip end: no successor frames to verify the closure")
     elif m["closure_steps"] > CLOSURE_MAX_STEPS:
@@ -648,12 +650,33 @@ def classify_window(a: Analysis, s: int, e: int) -> dict:
     return {**metrics, "classification": verdict}
 
 
-def recommend(a: Analysis, policy: str = "cycle") -> dict:
+def recommend(a: Analysis, policy: str = "cycle", candidate: tuple[int, int] | None = None) -> dict:
     """Select a complete forward cycle; never substitute reversed playback."""
     if policy not in ('auto','cycle'):raise ValueError('a continuous cycle requires forward playback')
-    found=search_ambient(a)
+    if candidate is not None:
+        first, end = candidate
+        best = classify_window(a, first, end)
+        if best['closure_steps'] is None:
+            raise ValueError('[insufficient-context] candidate needs two successor frames after '
+                             f'endExclusive={end}; only {a.clip.count} frames are available')
+        if end + 2 > a.usable['endExclusive']:
+            raise ValueError('[drift-limit] candidate or its successor evidence exceeds the usable range: '
+                             + a.usable['reason'])
+        if best['classification']['class'] != 'valid-cycle':
+            raise ValueError('[candidate-rejected] ' + '; '.join(best['classification']['reasons']))
+        found = [best]
+    else:
+        if a.clip.count < a.lengths['minFrames'] + 2:
+            raise ValueError('[insufficient-context] minimum cycle length requires '
+                             f"{a.lengths['minFrames']} candidate frames plus two successor frames; "
+                             f'only {a.clip.count} frames are available')
+        if a.usable['endExclusive'] < a.lengths['minFrames'] + 2:
+            raise ValueError('[drift-limit] usable range is too short for a cycle and its two successor frames: '
+                             + a.usable['reason'])
+        found=search_ambient(a)
     if not found:
-        raise ValueError('no continuous cycle passes pose/velocity closure; inspect the source, review a complete candidate manually, or explicitly request another take')
+        raise ValueError('[closure-failed] tested windows exceed the pose/velocity closure threshold '
+                         f'{CLOSURE_MAX_STEPS}; inspect the source or review another complete candidate')
     best=found[0]
     return {'policy':'cycle','window':best,'cycles':1,'candidates':{'closing':found},
             'confidence':confidence_ambient(a,best,'cycle')}
@@ -783,6 +806,20 @@ def verify_selection(selection: dict, selection_path: Path, frames_dir: Path, cl
     hashes = clip.hashes[start:end] if clip is not None else [comfyui_forge_core.sha256_file(p) for p in paths[start:end]]
     if hashes != selection["hashes"]:
         raise ValueError("selection hashes no longer match source frames")
+    evidence = selection['raw'].get('closureEvidence', [])
+    if 'closureEvidence' in selection['raw'] and [r['sourceIndex'] for r in evidence] != [end, end + 1]:
+        raise ValueError('cycle closure evidence must name exactly two successor frames')
+    for row in evidence:
+        i = row['sourceIndex']
+        if type(i) is not int or i < end or i >= len(paths) or paths[i].name != row['file']:
+            raise ValueError('cycle closure evidence no longer matches successor frames')
+        if comfyui_forge_core.sha256_file(paths[i]) != row['sha256']:
+            raise ValueError('cycle closure evidence checksum changed')
+    provenance = selection['raw'].get('candidateProvenance')
+    if provenance:
+        original = provenance['sourceSelection']
+        if comfyui_forge_core.sha256_file(Path(original['path'])) != original['sha256']:
+            raise ValueError('source cycle selection changed after registration')
     return paths
 
 
@@ -1149,7 +1186,38 @@ def cmd_select(args: argparse.Namespace) -> dict:
                        drift_tolerance=args.drift_tolerance, min_seconds=args.min_seconds,
                        max_seconds=args.max_seconds)
     clip = analysis.clip
-    rec = recommend(analysis, args.policy)
+    candidate = parse_interval(args.candidate) if getattr(args, 'candidate', None) else None
+    provenance = None
+    registration_path = Path(args.frames_dir).resolve().parent / 'registration.json'
+    if registration_path.is_file():
+        registration = comfyui_forge_core.read_json(registration_path)
+        provenance = registration.get('cycleCandidate')
+        if provenance:
+            mapped = tuple(provenance['registeredRange'])
+            if candidate is not None and candidate != mapped:
+                raise ValueError('candidate differs from the cycle preserved during registration')
+            candidate = mapped
+            source = provenance['sourceSelection']
+            if comfyui_forge_core.sha256_file(Path(source['path'])) != source['sha256']:
+                raise ValueError('source cycle selection changed after registration')
+            original = read_selection(Path(source['path']))
+            if original['fps'] != clip.fps:
+                raise ValueError('registered cycle fps differs from its source selection')
+            length = original['endExclusive'] - original['start']
+            if (provenance['sourceRange'] != [original['start'], original['endExclusive']]
+                    or mapped != (0, length) or clip.count != length + 2
+                    or provenance['contextSourceIndices'] != [original['endExclusive'], original['endExclusive'] + 1]):
+                raise ValueError('registered cycle mapping differs from its source selection')
+            records = registration['frames']
+            if len(records) != clip.count:
+                raise ValueError('registered cycle frame count changed')
+            for i, row in enumerate(records):
+                if ((registration_path.parent / row['file']).resolve() != clip.paths[i].resolve()
+                        or row['sha256'] != clip.hashes[i]
+                        or row['sourceIndex'] != provenance['sourceRange'][0] + i
+                        or (i < length and row['sourceSha256'] != original['hashes'][i])):
+                    raise ValueError('registered cycle frame mapping or checksum changed')
+    rec = recommend(analysis, args.policy, candidate)
     w = rec["window"]
     indices = kept_indices(analysis, w["start"], w["endExclusive"])
     durations = kept_durations(w["start"], w["endExclusive"], indices, clip.fps)
@@ -1164,7 +1232,10 @@ def cmd_select(args: argparse.Namespace) -> dict:
             review=" ".join(confidence["review"]), kind=analysis.kind, window=(w["start"], w["endExclusive"]),
             extra={"cycles": rec["cycles"], "confidence": {"label": confidence["label"],
                                                            "overall": confidence["overall"]},
-                   "seam": seam})
+                   "seam": seam, 'motionType': 'cycle',
+                   'closureEvidence': [{'sourceIndex': i, 'file': clip.names[i], 'sha256': clip.hashes[i]}
+                                       for i in (w['endExclusive'], w['endExclusive'] + 1)],
+                   **({'candidateProvenance': provenance} if provenance else {})})
         aids = None if args.no_aids else write_aids(analysis, rec, indices, durations, stage / "aids")
         write_selection_files(stage, {"selection.json": selection})
         checks = [{"id": "loop-found", "status": "pass", "value": [w["start"], w["endExclusive"]]},
@@ -1312,6 +1383,8 @@ def build_parser() -> argparse.ArgumentParser:
     select.add_argument("--drift-tolerance", type=float,
                         help=f"usable range ends past this measured scale drift fraction (default {DRIFT_TOLERANCE})")
     select.add_argument("--min-seconds", type=float, default=0.5, help="continuous-cycle: shortest loop (default 0.5)")
+    select.add_argument('--candidate', metavar='START:END',
+                        help='validate this exact candidate without searching for a replacement; needs two successor frames')
     select.add_argument("--max-seconds", type=float, default=4.0, help="continuous-cycle: longest loop (default 4)")
     select.add_argument("--evaluate", action="append", default=[], metavar="START:END",
                         help="also classify this 0-based [start, endExclusive) window (repeatable)")

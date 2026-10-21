@@ -13,6 +13,14 @@ Standard delivery is selected transparent PNG frames, sprite sheet, GIF preview 
 Source processing has no fixed 600-frame ceiling. Pairwise candidate analysis checks a configurable memory budget (`COMFYUI_FORGE_ANALYSIS_MEMORY_MB`, positive integer MiB); reduce the reviewed candidate range or adjust that budget when necessary. Never silently truncate a source or change final frame counts to fit a hard-coded limit.
 
 
+## Preserve cycle validation context
+
+Keep the full source through automatic cycle selection. Closure compares the candidate start with the two frames immediately after its end: one for pose and the next for velocity. These are validation evidence, not playback frames. Do not crop to just the selected period and search again.
+
+If selecting before registration, pass the resulting `selection.json` to `comfyui_forge_register_clip.py apply --cycle-selection SELECTION` instead of `--range`. Registration verifies the selection hashes, retains its exact candidate plus two successor frames, and records the original-to-registered mapping. Run `comfyui_forge_gait_loop.py select` on that registered `frames/` directory: it validates the preserved candidate without searching for a replacement. The finalizer exports only selected playback frames, never the two context frames. Keep the original selection file for provenance verification.
+
+For an explicitly reviewed range on an untrimmed clip, `select --candidate START:END` validates that exact half-open interval. Missing successor frames, drift limits and failed pose/velocity closure have separate error messages; missing evidence is not an artistic rejection. Keep the existing thresholds and inspect actual motion even when metrics pass.
+
 ## Shared timing and resource checks
 
 Selection tick weights and millisecond durations must describe the same clock (half-up cumulative rounding to milliseconds). An event carrying both tick and millisecond timestamps must agree within that rounding precision. Rejected selections and a playback policy incompatible with the final contract are refused. Generic event labels work across retime, standard finalization and the schemas without a whitelist or custom prefix.

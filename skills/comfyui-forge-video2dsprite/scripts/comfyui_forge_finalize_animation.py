@@ -52,6 +52,11 @@ def prepare(finished, selection_path, specification, source, work, required=()):
     provenance,dependencies=source_provenance(finish,finished,source)
     original = (finished / finish['source']['frames']).resolve()
     original_files = comfyui_forge_gait_loop.verify_selection(selection, selection_path, original)
+    for row in selection['raw'].get('closureEvidence', []):
+        dependencies.append({'path': str(original_files[row['sourceIndex']]), 'sha256': row['sha256']})
+    provenance_selection = selection['raw'].get('candidateProvenance', {}).get('sourceSelection')
+    if provenance_selection:
+        dependencies.append(provenance_selection)
     if final['mode'] == 'loop' and selection['policy'] != 'cycle':
         raise ValueError('a continuous cycle requires a forward cycle selection, not reversed playback')
     timing = playback_plan(selection, final['frameCount'], final['mode'], required)

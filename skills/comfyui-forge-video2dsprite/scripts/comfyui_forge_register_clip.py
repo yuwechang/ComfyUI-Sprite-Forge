@@ -20,6 +20,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 import comfyui_forge_core  # noqa: E402  (this skill's vendored copy)
 import comfyui_forge_matte  # noqa: E402
+import comfyui_forge_gait_loop as gait
 import comfyui_forge_prepare_i2v_input as prep  # noqa: E402  (sibling script: action templates, placement, key helpers)
 
 TOOL_NAME = "register_clip"
@@ -616,6 +617,7 @@ class ApplyPlan:
     min_run: int
     rest_frames: list[int]
     fx: bool
+    cycle_candidate: dict | None = None
 
 
 def _plan_apply(args: argparse.Namespace, character: dict[str, Any] | None) -> ApplyPlan:
@@ -638,6 +640,25 @@ def _plan_apply(args: argparse.Namespace, character: dict[str, Any] | None) -> A
     all_files = list_frames(args.frames, args.pattern)
     total = len(all_files)
     start, end = args.range if args.range else (0, None)
+    candidate = None
+    if getattr(args, 'cycle_selection', None):
+        selection_path = Path(args.cycle_selection).resolve()
+        selection = gait.read_selection(selection_path)
+        if selection['policy'] != 'cycle':
+            raise ValueError('--cycle-selection requires a forward cycle selection')
+        selected_files = gait.verify_selection(selection, selection_path, Path(args.frames))
+        if [p.resolve() for p in selected_files] != [p.resolve() for p in all_files]:
+            raise ValueError('cycle selection requires the same ordered source frames; do not filter --pattern')
+        start, candidate_end = selection['start'], selection['endExclusive']
+        if candidate_end + 2 > total:
+            raise ValueError('[insufficient-context] cycle registration needs the two source frames after '
+                             'the candidate; use the untrimmed source, not repeated or invented frames')
+        end = candidate_end + 2
+        candidate = {'sourceSelection': {'path': str(selection_path),
+                                        'sha256': comfyui_forge_core.sha256_file(selection_path)},
+                     'sourceRange': [start, candidate_end],
+                     'registeredRange': [0, candidate_end - start],
+                     'contextSourceIndices': [candidate_end, candidate_end + 1]}
     end = total if end is None else min(end, total)
     if start >= end:
         raise ValueError(f"--range selects no frames out of {total}")
@@ -657,7 +678,7 @@ def _plan_apply(args: argparse.Namespace, character: dict[str, Any] | None) -> A
                          "(video2dsprite process frames-clean), not raw video frames")
     fit = video_fit(job.canvas, (first.shape[1], first.shape[0]), fit_name)
     return ApplyPlan(job, view, all_files, files, start, padding, out_size, out_anchor, fit, resampler, int(min_run),
-                     rest_frames, fx)
+                     rest_frames, fx, candidate)
 
 
 def _load_frame(plan: ApplyPlan, path: Path) -> tuple[np.ndarray, str]:
@@ -852,6 +873,8 @@ def _cmd_apply_once(args: argparse.Namespace) -> dict[str, Any]:
                             stage / "review-contact.png")
         document = _registration_document(args, plan, final, records, checks, master_sil, master_hip, master_anchor,
                                           band, rest_measures, targets, contact, character)
+        if plan.cycle_candidate:
+            document['cycleCandidate'] = plan.cycle_candidate
         if getattr(args, "automatic_padding_receipt", None):
             document["automaticPadding"] = args.automatic_padding_receipt
         document["hygiene"] = {"mode": "floor", "floor": HYGIENE_FLOOR, "floor_px": hygiene["floor_px"],
@@ -1713,7 +1736,10 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--frames", required=True, help="folder of keyed RGBA frames at the video's size (natural order)")
     pa.add_argument("--pattern", default="*.png", help="frame file pattern (default *.png)")
     pa.add_argument("--output-dir", required=True, help="new folder for frames/ and registration.json")
-    pa.add_argument("--range", type=parse_range, help="START:END frames to register (0-based, end exclusive)")
+    interval = pa.add_mutually_exclusive_group()
+    interval.add_argument("--range", type=parse_range, help="START:END frames to register (0-based, end exclusive)")
+    interval.add_argument('--cycle-selection', help='verified cycle selection.json; preserve its candidate '
+                          'and register two successor frames for closure validation only')
     pa.add_argument("--action-padding", type=prep.parse_padding,
                     help="L,T,R,B source px; grows the canvas and shifts the anchor (default: the job's padding)")
     pa.add_argument("--fit", choices=FITS, help="provider canvas to video: auto (default), stretch, cover, contain")

@@ -4,6 +4,9 @@ import io
 from pathlib import Path
 import sys
 import unittest
+import tempfile
+from unittest.mock import patch
+from PIL import Image
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'skills/comfyui-forge-video2dsprite/scripts'))
@@ -11,6 +14,25 @@ import comfyui_forge_video2dsprite as video
 
 
 class VideoPipelineScopeTests(unittest.TestCase):
+    def test_key_material_warning_reports_applied_despill_mode(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'frame.png'
+            image=Image.new('RGBA',(48,48),(255,0,255,255))
+            image.paste((255,200,0,255),(12,10,36,40))
+            image.save(path)
+            for requested,applied in (('auto','edge'),('all','all'),('edge','edge'),('off','off')):
+                with self.subTest(requested=requested),patch.object(video.fm,'auto_interior_despill',
+                    return_value={'reference_share':0.0,'clip_median_share':0.02,
+                                  'interior_despill':False,'clip_sample_frames':[0]}):
+                    plan=video._plan_clip([path],video.MatteSettings(key='magenta',
+                        despill_mode=requested),None)
+                    self.assertEqual(plan.despill_applied,applied)
+                    warning=next(w for w in plan.warnings if 'applied despill mode:' in w)
+                    self.assertIn('applied despill mode: '+applied,warning)
+                    self.assertNotIn('subject owns',warning)
+                    self.assertNotIn('stays off',warning)
+                    self.assertEqual(plan.params.interior_despill,applied=='all')
+
     def test_shipped_local_imports_resolve_inside_this_project(self):
         scripts=[p for p in (ROOT/'skills').glob('*/scripts/*.py')]
         available={p.stem for p in scripts}

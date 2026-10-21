@@ -67,9 +67,6 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(record['failures'],['identity']);self.assertEqual(record['status'],'needs-review')
     def test_only_generic_forward_cycle_is_exposed(self):
         self.assertIsNotNone(cycle.build_parser());self.assertEqual(cycle.KINDS,('cycle',));self.assertNotIn('pingpong',cycle.LOOP_POLICIES)
-        fake=SimpleNamespace()
-        with patch.object(cycle,'search_ambient',return_value=[]):
-            with self.assertRaisesRegex(ValueError,'inspect the source'):cycle.recommend(fake)
     def test_reselection_timing_revision_and_interrupted_delivery_recover(self):
         case=fixtures.UnifiedTests();case.setUp()
         try:

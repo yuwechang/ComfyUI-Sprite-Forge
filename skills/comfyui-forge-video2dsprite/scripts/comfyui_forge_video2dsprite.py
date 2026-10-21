@@ -498,10 +498,10 @@ def _plan_clip(paths: list[Path], settings: MatteSettings, reference: np.ndarray
     owns_material = decision is not None and max(decision.get("clip_median_share", 0.0),
                                                  decision.get("reference_share", 0.0)) > fm.KEY_MATERIAL_SHARE_MAX
     if settings.matte == "soft" and owns_material and not settings.protect_colors:
-        warnings.append("the subject owns key-coloured material, so interior despill stays off; the video soft "
-                        "matte also keys light colours near the key (for example #b43cc8 against magenta): review "
-                        "the frames, pass --protect-color for design colours, or regenerate on the key that "
-                        "key-plan recommends")
+        warnings.append(f"key-coloured pixels were detected in the reference or sampled clip; "
+                        f"applied despill mode: {applied}. These may be design colours or generated spill; "
+                        "review against the reference. The soft matte can also remove colours near the key; "
+                        "use --protect-color for design colours or choose a safer generation background")
     at_risk = []
     master = None
     if settings.matte == "soft" and keyable and reference is not None:
