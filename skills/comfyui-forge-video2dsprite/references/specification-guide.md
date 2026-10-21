@@ -20,18 +20,18 @@ Run `comfyui_forge_animation_spec.py show --settings PROJECT/.comfyui-sprite-for
 
 Use two short sections with the actual values calculated for THIS task. The following is a presentation template, not hardcoded dimensions, seconds or fps. Substitute chosen sizes, source tier and exact requested seconds; disclose aligned frame count and actual source duration as well. Describe8fps as an initial FINAL output default, not the24fps generation cadence. Preserve existing fixed-camera/effects/playback constraints when relevant.
 
-**最終成品：{finalWidth}×{finalHeight}｜預設8fps｜播放{finalSeconds}秒**
+**Final output: {finalWidth}×{finalHeight} | Default8fps | Playback{finalSeconds}s**
 
-- 角色預設置中，依完整動作範圍調整位置與留白，確保本體及所有附屬部份完整入鏡；交付保留相同構圖。
-- 取幀時依動作與節奏在4-16fps間評估調整；若需超過16fps，先說明原因並取得同意，最高24fps。
-- 附透明PNG、sprite sheet與GIF預覽。另有明確指定fps時，顯示其實際設定，不要再標成預設8fps。
+- Start with centred placement, then adjust position and margins for the complete motion envelope so the body and all attached parts remain fully in frame; preserve the planned composition in delivery.
+- Assess sampling at4-16fps according to the actual motion and rhythm. Above16fps, explain the reason and obtain approval first; the maximum is24fps.
+- Include transparent PNGs, a sprite sheet and a GIF preview. If the user explicitly specifies fps, display that actual setting instead of labelling it the8fps default.
 
-**AI來源影片：{sourceWidth}×{sourceHeight}（{tier}）｜24fps｜請求{sourceSeconds}秒**
+**AI source video: {sourceWidth}×{sourceHeight} ({tier}) |24fps | Requested{sourceSeconds}s**
 
-- 長度依成品播放時間的2-3倍評估，請求及實際長度皆不超過15秒；目標取得2-3次完整動作，最後選一組製作成品。
-- 實際為{sourceFrameCount}幀、約{actualSourceSeconds}秒；來源長度不是最終遊戲播放長度。
+- Choose source duration at2-3 times the final playback duration; neither requested nor actual duration may exceed15s. Aim for2-3 complete demonstrations and select one for delivery; one complete acceptable demonstration is sufficient.
+- Actual source: {sourceFrameCount}frames, approximately{actualSourceSeconds}s. Source duration is separate from final game playback duration.
 
-Localize this template to the user's language. Do not print placeholders, raw JSON, unresolved duration ranges or unchosen tiers to the user. If a later revised generation uses changed settings, show the revised values before submitting it. At delivery report the chosen final fps and total frame count, not the initial8fps baseline.
+Present every user-facing message, including this pre-generation specification summary, in the user's language unless they explicitly request another language. This English template defines the information to convey, not the output language; translate its headings, explanations and source-tier labels while preserving the actual numbers and technical units. Do not print placeholders, raw JSON, unresolved duration ranges or unchosen tiers to the user. If a later revised generation uses changed settings, show the revised values before submitting it. At delivery report the chosen final fps and total frame count, not the initial8fps baseline.
 
 ## Final-rate assessment and acceptance
 
@@ -45,7 +45,7 @@ Acceptance of the dynamic default authorizes autonomous final-rate assessment wi
 
 ## Calculation and action review
 
-Source choices are fixed: performance512x512, balanced768x768, quality1024x1024, numbered1/2/3. Minimum source dimensions512x512 and maximum1024x1024; balanced is the default. Do not multiply final sprite dimensions by4/5/6 or automatically enlarge the canvas to meet an estimated envelope. Plan placement and directional margins for all attached parts at a consistent character scale, then review actual final-size readability. If the selected canvas cannot fit the motion, reconcile the constraints rather than silently changing resolution or shrinking one motion.
+Source choices are fixed: performance512x512, balanced768x768, quality1024x1024, numbered1/2/3. Minimum source dimensions512x512 and maximum1024x1024; balanced is the default. Do not multiply final sprite dimensions by4/5/6 or automatically enlarge the canvas to meet an estimated envelope. Plan placement and directional margins for all attached parts at a consistent character scale, then review actual final-size readability. If the selected canvas cannot fit the current execution, first consider reframing or changing unspecified motion details through prompt/seed retries as described in motion-planning.md. If the constraints still cannot be met, reconcile them rather than silently changing resolution or shrinking one motion.
 
 The adapter requires multiples of32; workflow planning may add stricter alignment or verified minimum dimensions. Check the selected tier against those constraints rather than silently changing its dimensions. `--ratio` and `--envelope` remain planning context, not permission to enlarge the fixed tiers. Custom source dimensions are only for explicit requests and must remain within512-1024 per dimension, aligned and compatible with the final cell size.
 
@@ -101,7 +101,7 @@ The last sentence is localized, not hardcoded Chinese. Traditional Chinese wordi
 
 ## Source candidates and final playback
 
-The source contains2-3 complete independent demonstrations of the SAME action for comparison. Final playback (loop, oneshot or terminal hold) is a separate choice. Select one whole candidate before sampling; do not mix separate attempts. One-shot candidates preserve the requested terminal state; source-only cuts/resets are excluded from the selected candidate. Completeness is more important than candidate count: lengthen the source proposal when necessary instead of accelerating an incomplete demonstration. prepare --candidates 2|3 records candidate intervals and separate reset rows. A custom prompt records its declared motionType and exact input/prompt fingerprints; actual adherence and candidate boundaries require visual review.
+Aim for2-3 complete independent demonstrations of the SAME action for comparison; this is an expected target, not a required minimum. Final playback (loop, oneshot or terminal hold) is a separate choice. Select one whole candidate before sampling; do not mix separate attempts. One-shot candidates preserve the requested terminal state; source-only cuts/resets are excluded from the selected candidate. One complete candidate that passes review is enough: report the actual count and select from it without regenerating solely to reach2-3 demonstrations. If no complete usable candidate exists, consider revising the prompt/seed or proposing more source time within the agreed limits rather than accelerating an incomplete demonstration. prepare --candidates 2|3 records candidate intervals and separate reset rows. A custom prompt records its declared motionType and exact input/prompt fingerprints; actual adherence and candidate boundaries require visual review.
 
 Preparation compares video-matte risks for alternative colour keys without recolouring the subject. Review suggested protectColours and alpha on light/dark backgrounds; RGB colour locking cannot repair missing alpha. Registration auto-padding is one bounded local retry for logical canvas overflow only; true source clipping remains an error.
 

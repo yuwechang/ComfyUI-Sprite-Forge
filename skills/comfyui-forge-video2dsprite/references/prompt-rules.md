@@ -16,6 +16,6 @@ After successful extraction, compare generation-background candidates with the s
 
 ## Source and final motion
 
-All three types may use2-3 complete independent demonstrations in the source. A cycle flows between periods. One-shots complete their full action and recovery or terminal state; resets occur only between source demonstrations, never inside the selected final action. Completeness takes priority over count. Select one whole candidate before retiming.
+All three types may use2-3 complete independent demonstrations in the source. A cycle flows between periods. One-shots complete their full action and recovery or terminal state; resets occur only between source demonstrations, never inside the selected final action. Completeness takes priority over count. Two to three demonstrations are a target, not a minimum: a single complete acceptable candidate is sufficient. Report the reviewed count and select one whole candidate before retiming; do not regenerate solely to obtain more repetitions.
 
 For either one-shot type, normally use comfyui_forge_retime.py --kind TYPE --auto-oneshot --range START:END with confirmed final duration and fps. Continuous cycles normally use phase selection, with explicit retiming if their requested rhythm needs it. Any key/hold/event must come from reviewed motion needs and source frames. Uniform temporal spacing is not a universal rule. Keep events and authored timing through comfyui_forge_finalize_animation.py and inspect the final materialized animation.
