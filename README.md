@@ -33,7 +33,7 @@
 
 本專案不附 ComfyUI 工作流；請自行準備已能正常生成影片的 API JSON。
 
-### FFmpeg 安裝（Windows）
+## FFmpeg 安裝（Windows）
 
 本 Skill 需要 FFmpeg 和 FFprobe 來處理影片，把下面這句話貼給你的 Codex：
 

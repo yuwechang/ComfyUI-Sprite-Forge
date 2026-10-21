@@ -33,7 +33,7 @@
 
 ComfyUI のワークフローは同梱していません。動画を正常に生成できる、ご自身の API JSON を用意してください。
 
-### FFmpeg のインストール（Windows）
+## FFmpeg のインストール（Windows）
 
 このスキルでは、動画の処理に FFmpeg と FFprobe が必要です。次の一文を Codex に貼り付けてください：
 

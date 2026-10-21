@@ -33,7 +33,7 @@ Models are not included, and this project does not install ComfyUI for you. You 
 
 No ComfyUI workflow is bundled. Bring your own API JSON that already generates videos successfully.
 
-### FFmpeg installation (Windows)
+## FFmpeg installation (Windows)
 
 This skill requires FFmpeg and FFprobe to process video. Copy this sentence into your Codex:
 

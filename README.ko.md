@@ -33,7 +33,7 @@
 
 ComfyUI 워크플로는 포함되어 있지 않습니다. 영상 생성이 정상 작동하는 본인의 API JSON을 준비하세요.
 
-### FFmpeg 설치（Windows）
+## FFmpeg 설치（Windows）
 
 이 스킬은 영상 처리를 위해 FFmpeg와 FFprobe가 필요합니다. 아래 문장을 Codex에 붙여넣으세요:
 

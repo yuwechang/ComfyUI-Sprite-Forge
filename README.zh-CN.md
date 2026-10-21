@@ -33,7 +33,7 @@
 
 本项目不附带 ComfyUI 工作流；请自行准备已经能够正常生成视频的 API JSON。
 
-### FFmpeg 安装（Windows）
+## FFmpeg 安装（Windows）
 
 本 Skill 需要 FFmpeg 和 FFprobe 来处理视频，把下面这句话发给你的 Codex：
 
