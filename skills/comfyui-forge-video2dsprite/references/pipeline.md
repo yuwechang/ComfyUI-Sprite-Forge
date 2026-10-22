@@ -8,10 +8,7 @@ Follow [the confirmed specification](specification-guide.md) and [generic batch 
 
 Deliver only the standard ZIP containing selected RGBA PNG frames, sprite sheet, GIF preview and original MP4. Review JSON, contact sheets, manifests and diagnostics stay in work. GIF uses binary alpha and 10 ms time units, so preserve the PNGs and confirmed playback specification as authoritative.
 
-Standard delivery is selected transparent PNG frames, sprite sheet, GIF preview and source MP4. This fork does not supply a separate engine transport or runtime.
-
-Source processing has no fixed 600-frame ceiling. Pairwise candidate analysis checks a configurable memory budget (`COMFYUI_FORGE_ANALYSIS_MEMORY_MB`, positive integer MiB); reduce the reviewed candidate range or adjust that budget when necessary. Never silently truncate a source or change final frame counts to fit a hard-coded limit.
-
+Pairwise candidate analysis checks a configurable memory budget (`COMFYUI_FORGE_ANALYSIS_MEMORY_MB`, positive integer MiB); reduce the reviewed candidate range or adjust that budget when necessary. Never silently truncate a source or change final frame counts to fit a hard-coded limit.
 
 ## Preserve candidate identity and validation context
 

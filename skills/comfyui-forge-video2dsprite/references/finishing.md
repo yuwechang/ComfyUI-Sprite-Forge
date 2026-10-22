@@ -8,13 +8,13 @@ anchor; the pixel finish's outline adds 1 px around it.
 
 Both finishes can put every frame on a fixed cell (`--canvas`) and lock the design
 colours to the master (`--colour-lock`, the default inside sprite sets). The plain pixel
-finish ports game-opus55 `tools/pixelate.py` (see the last section); the default pixel
+finish ports game-opus55 `tools/pixelate.py`; the default pixel
 finish is the bold one below. Keying, matte erosion and un-mixing stay in
 `comfyui_forge_video2dsprite.py clean/process` (soft matte). Locks stay in `comfyui_forge_register_clip.py apply
 --lock`, and frame choice and timing stay in `comfyui_forge_gait_loop.py` and `comfyui_forge_retime.py`.
 
-Commands run from your project root. `<skill-dir>` is this skill's folder
-(`${CLAUDE_SKILL_DIR}` in Claude Code). `hd` and `pixel` write a new `--output-dir`.
+Commands run from your project root. `<skill-dir>` is this skill's folder.
+`hd` and `pixel` write a new `--output-dir`.
 `palette build` and `lineup` write new files. Nothing is ever replaced, and a failed run
 publishes nothing. Success prints one ASCII JSON line. Errors print `error: ...` and exit
 1. Usage errors exit 2.
@@ -26,7 +26,6 @@ publishes nothing. Success prints one ASCII JSON line. Errors print `error: ...`
 3. `comfyui_forge_gait_loop.py select` or `comfyui_forge_retime.py`. A selection made on the registered frames
    still applies, because finished frames keep the source file names and order.
 4. `comfyui_forge_finalize_animation.py prepare/approve`: apply the selected playback slots, review at final size, and deliver the standard PNG sequence, sheet, GIF and source MP4. Use the final specification and keep scale/placement unchanged.
-
 
 ## HD finish (default)
 
@@ -62,8 +61,7 @@ python "<skill-dir>/scripts/comfyui_forge_finish_frames.py" pixel --frames work/
 
 A video frame downscaled by area averaging comes out soft: every edge pixel is an
 in-between colour, thin dark lines and eyes melt into the fill, and a 255-colour palette
-keeps all of it (the 2026-10-06 live fox had 155-162 colours per frame from the 255-colour
-plan palette; the palette itself was applied). The pixel finish therefore does more than
+can retain that softness. The pixel finish therefore does more than
 quantize:
 
 1. **Alpha** comes from the same box downscale as HD (the same silhouette).
@@ -84,10 +82,7 @@ quantize:
    downscaled painting. A learned palette is then **spaced** (`--shade-gap`, default
    OKLab dE 0.04): the closest pair of learned colours merges into its usage-weighted mean
    until no two are closer, the darkest, the lightest and reserved colours keeping their
-   place. k-means spends its colours where the pixels are, so plain k-means gave the
-   2026-10-06 fox eight oranges 0.03 apart, which read as speckle at 4x; spaced, each
-   material keeps a few distinct tones (fox2 run: 32 learned colours became 20 and the
-   share of barely visible shade steps between neighbours fell from 11.4% to 2.9%).
+   place. This reduces near-duplicate shades.
    `--colors` is then a cap; a given `--palette` is used as it is; `--shade-gap 0` is off.
 5. **No dither** and **temporal hysteresis** (`forge_palette.quantize_sequence`): a pixel
    keeps last frame's index while that colour stays within `--margin` (squared OKLab
@@ -113,10 +108,6 @@ pixelate.py port: one orphan pass, the hd frames quantized as they are). Hystere
 follows file order: a loop window chosen later by gait_loop does not hold its own seam
 pair.
 
-On the live fox run (Grok clip, 145 frames, 47 px with the outline): 28-31 colours per
-frame instead of 155-162 (old cold-test sheet: 726-919), binary alpha instead of 199 alpha
-levels, noise flips 13.7 per pair against 17.7 for the old 255-colour finish.
-
 The finish says nothing about timing. Frame times are the selection's (gait_loop, retime;
 use a confirmed final specification with `--fps 12.5` for exact 80 ms frames).
 
@@ -133,8 +124,7 @@ so the cell survives into the atlas.
 
 ## Colour lock (--colour-lock)
 
-Image-to-video models drift design colours between frames: the 2026-10-06 run's leather
-boots turned olive in one frame and maroon in the next, and a fast hand picked up pink.
+Image-to-video models can drift design colours between frames.
 `--colour-lock MASTER.png` (the keyed master, RGBA; `rest` uses the rest frame) runs
 `comfyui_forge_colour_lock.py` on the finished frames (pixel: before the lift and the palette):
 
@@ -157,9 +147,7 @@ boots turned olive in one frame and maroon in the next, and a fast hand picked u
 the stats and, at 1x, `measure()` before and after: hue flips per frame pair (pixels of
 similar lightness whose chroma jumps by more than 0.03), the per-region spread of the mean
 chroma across frames, and the foreign share. `comfyui_forge_colour_lock.py measure --frames DIR ...
---master master.png [--loop]` prints the same numbers for any frame folders. Measured on
-Aria's live run (24-frame loop): hue flips 352 -> 170 per pair, region spread mean 0.0059 ->
-0.0012 (max 0.0245 -> 0.0072), the boots' frame-to-frame chroma step 0.024 -> 0.003.
+--master master.png [--loop]` prints the same numbers for any frame folders.
 
 ## One character, many actions
 
@@ -241,7 +229,7 @@ last-to-first pair.
 | `alphaFlipsPerPair` | opacity toggles (pixel: binary alpha; HD: the 50% contour) | yes |
 | `indexFlipsPerPair` | palette-index changes on pixels opaque in both frames (pixel) | yes |
 | `noiseFlipsPerPair` | either change where the finished source barely moved (OKLab dE < 0.02, alpha within 5%): pure flicker | no |
-| `edgeFlipsPerPair` | the opacity toggles among those: silhouette-edge flicker (sprite-gen's target is 1.1) | no |
+| `edgeFlipsPerPair` | the opacity toggles among those: silhouette-edge flicker | no |
 
 The pixel finish also quantizes every frame alone, as the baseline. `perFrameNearest` and
 `noiseFlipReduction` show what hysteresis saved, and the `hysteresis` check warns if it

@@ -10,6 +10,8 @@ Maintainer yuwechang supplied these assets for testing after installation and vi
 | [sample-character-run-spritesheet.png](sample-character-run-spritesheet.png) | Transparent 1024×128 PNG sheet with 8 frames of 128×128, ordered left to right. |
 | [sample-character-run-preview.gif](sample-character-run-preview.gif) | Transparent 128×128 running preview with 8 frames in a 1-second loop. |
 
+This example uses one row; the current standard layout for eight frames is four columns and two rows.
+
 Play the sheet at 8 fps. The GIF alternates 120/130 ms frame delays. Generated motion may differ from this example.
 
 See [LICENSE](../LICENSE) in the project root for licensing.

@@ -9,10 +9,8 @@ Use this helper only to inspect, key, pad and approve supplied reference art for
 
 Character animation, registration, colour finishing, selection, retiming and standard PNG/sheet/GIF/MP4 delivery belong to the sibling [local video animation skill](../comfyui-forge-video2dsprite/SKILL.md). Standalone icon/sheet processing and unrelated exports are outside this fork.
 
-## Local installation
+## Runtime setup
 
-This unofficial fork uses ONLY local ComfyUI for generation. No cloud providers, API keys, CLI generation or automatic code-art fallback. Still-image generation is not configured; use supplied images.
+Find the repository and configuration in `<skills-root>/.comfyui-sprite-forge.install.json` (`project`, `comfyuiConfig`). Use the repository's `.venv/Scripts/python.exe` on Windows or `.venv/bin/python` elsewhere, or a Python with the documented dependencies. Installation steps are in the repository's `INSTALL.md`.
 
-Keep the three animation-core skills together: generate2dmedia, generate2dsprite and video2dsprite. This fork contains only the three animation-core skills. Use only this project's scripts or their installed copies, never another project's skill programs. Keep the declared Python/FFmpeg dependencies and configured local ComfyUI connection. Find the permanent repository and configured JSON in `<skills-root>/.comfyui-sprite-forge.install.json` (`project`, `comfyuiConfig`). Use that repository's `.venv/Scripts/python.exe` on Windows or `.venv/bin/python` elsewhere, or another Python with the documented dependencies. Do not copy the author's paths or alter original Sprite Forge settings.
-
-The adapter finds configuration from explicit COMFYUI_FORGE_CONFIG, then the installed manifest, then repository-local local-comfyui/config.local.json. No global environment changes are required. Read the configured API JSON before adapting a workflow; the user's ComfyUI must already run it.
+Configuration discovery order: explicit `COMFYUI_FORGE_CONFIG`, installed manifest, then repository-local `local-comfyui/config.local.json`.

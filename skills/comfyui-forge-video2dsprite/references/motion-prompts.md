@@ -20,14 +20,14 @@ feet-planted | Respect the explicit support constraints while preserving intende
 feet-ground-line | Respect the planned root trajectory without freezing moving support points.
 inside-frame | The whole body, the weapon and every moving part stay fully inside the frame with a clear margin on every side; nothing is cut off by the frame edge.
 flat-background | The background stays solid flat pure {key} for the whole shot: no floor, no ground, no shadow, no gradient, no glow, no haze, no light.
-no-extras | Nothing else appears in the frame: no dust, no dirt, no smoke, no puffs, no pebbles, no particles, no orbs, no sparks, no flashes, no projectiles, no arrows, no motion trails, no effects of any kind.
-identity-lock | CHARACTER LOCK for the whole clip: the face, hair, colours, costume, proportions and every design detail stay exactly as in the still; nothing new grows or appears on the character (no horns, no crests, no extra straps or weapons).
-face-visible | The whole face is visible in every frame: no hand, weapon, sleeve, hair or effect ever passes in front of the face.
+no-extras | Keep only the character and elements required by the requested action; remove unrequested effects or objects.
+identity-lock | Preserve the reference character identity, proportions, colours, costume and equipment throughout the clip.
+face-visible | Keep the face readable when required by the action, while allowing natural occlusion from the requested movement.
 keep-colours | The colours stay exactly as in the still in every frame: no tint, no colour shift, no darkening and no glow on the character.
 same-start-end | Complete recovery to the initial pose only for returning single-play candidates.
 starts-from-still | The first frame is exactly the supplied image: the same pose, position and size; the motion starts from there.
 single-action | Each candidate is one complete requested motion; source repetitions remain independent.
-weapon-shape | The weapon stays one single weapon of the same length and shape the whole time: never bending, never doubling, no second blade, no ghost blades.
+weapon-shape | Preserve the reference weapon count, shape and proportions throughout its movement.
 no-text | No text, letters, glyphs, writing or logos anywhere.
 no-flares | No cross flares, no starbursts, no four-point sparkles, no lens flares.
 visible-motion | The motion is clearly visible at game size: a full, readable {action} with real movement of the body, not a still image.

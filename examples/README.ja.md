@@ -10,6 +10,8 @@
 | [sample-character-run-spritesheet.png](sample-character-run-spritesheet.png) | 1024×128 の透明 PNG シート。左から右に 128×128 の 8 フレーム。 |
 | [sample-character-run-preview.gif](sample-character-run-preview.gif) | 128×128、8 フレーム、1 秒ループの透明な走りプレビュー。 |
 
+この例は1行の配置です。現在の標準納品では、8フレームは4列・2行になります。
+
 シートは 8 fps で再生します。GIF は 120／130 ミリ秒のフレーム間隔を交互に使います。生成される動作はサンプルと異なる場合があります。
 
 ライセンスはルートの [LICENSE](../LICENSE) を参照してください。

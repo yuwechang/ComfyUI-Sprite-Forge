@@ -24,10 +24,12 @@ The result is **128×128, 8 frames at 8 fps, looping for 1 second**. Transparent
 
 ![Eight-frame transparent running sprite sheet](examples/sample-character-run-spritesheet.png)
 
-## What you need first
+This example uses one row; the current standard layout for eight frames is four columns and two rows.
+
+## Before you start
 
 1. **Codex**, with access to local files and tools.
-2. **Local ComfyUI**, already installed and **able to generate a video with your MiniMax H3 workflow**.
+2. **Local ComfyUI (when generating video)**, already installed and **able to generate a video with your MiniMax H3 workflow**.
 
 Models are not included, and this project does not install ComfyUI for you. You can ask Codex to check and install the other software dependencies.
 
@@ -39,11 +41,11 @@ This skill requires FFmpeg and FFprobe to process video. Copy this sentence into
 
 > Please check whether FFmpeg and FFprobe are installed and run correctly on my Windows computer, download and install any missing tools from https://www.gyan.dev/ffmpeg/builds/, configure PATH, and verify that both run correctly without reinstalling tools that are already installed.
 
-## How to install
+## How to install this skill
 
 Copy this message into your Codex:
 
-> Install comfyui-sprite-forge from https://github.com/yuwechang/ComfyUI-Sprite-Forge . Follow the repository's installation instructions to install all skills, keeping the original Sprite Forge and my other skills unchanged. My local ComfyUI can already run H3. Help configure my workflow and check compatibility. Ask for file locations if needed. Do not automatically download models or start generating video.
+> Install comfyui-sprite-forge from https://github.com/yuwechang/ComfyUI-Sprite-Forge . Follow the repository's installation instructions to install all skills. My local ComfyUI can already run H3. Help configure my workflow and check compatibility. Ask for file locations if needed. Do not automatically download models or start generating video.
 
 After installation, **open a new Codex chat** before using the skills.
 
@@ -59,17 +61,15 @@ Codex can follow the project instructions to identify the required nodes. Some w
 
 Attach your character image and tell Codex:
 
-> Use comfyui-forge-video2dsprite to create a right-facing run cycle in place from this character image. Export a transparent 128×128 animation at 8 fps, with a game playback length of 1 second, plus a GIF preview. Keep the camera fixed and add no effects.
+> Use comfyui-forge-video2dsprite to create a right-facing run cycle in place from this character image.
 
-By default, the tool requests about **3 seconds** of source video, then selects suitable motion frames. The example produces **8 frames, each displayed for 0.125 seconds, totaling 1 second**.
-
-The character is scaled proportionally into a transparent canvas; the entire video is not stretched into a square. Check the result for character consistency, motion, and background-removal quality.
+You can also supply an existing video for conversion into transparent character animation, without generating a source video.
 
 ## First use and delivery
 
 First use confirms final cell size and playback duration (defaults128×128 and1second), without asking for fps. Output starts at8fps and adapts within4-16; above16 requires separate approval, maximum24fps. Choose only source resolution by number:1 performance512×512,2 balanced768×768(default),3 quality1024×1024. Source runs at24fps; duration is automatically assessed at2-3 times final playback, capped at15seconds including cadence alignment. Same-chat tasks may reuse settings, but every generation displays the current final/source specification. Guidance follows your conversation language.
 
-The longer source provides multiple complete action candidates to choose from; final playback does not automatically last 3 seconds or repeat 3 times. Standard delivery ZIP contains only selected PNG frames, a transparent animation sheet, GIF preview and source video. Previews appear in chat; JSON/logs/reports remain in the linked working directory.
+The source targets 2–3 complete demonstrations for comparison. One complete acceptable candidate is sufficient; the final animation uses one candidate. Standard delivery ZIP contains only selected PNG frames, a transparent animation sheet, GIF preview and source video. Previews appear in chat; JSON/logs/reports remain in the linked working directory.
 
 ## More details
 

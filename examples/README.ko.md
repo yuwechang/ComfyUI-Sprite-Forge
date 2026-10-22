@@ -10,6 +10,8 @@
 | [sample-character-run-spritesheet.png](sample-character-run-spritesheet.png) | 1024×128 투명 PNG 시트. 왼쪽에서 오른쪽으로 128×128 프레임 8개. |
 | [sample-character-run-preview.gif](sample-character-run-preview.gif) | 128×128, 8프레임, 1초 루프의 투명 달리기 미리보기. |
 
+이 예시는 한 줄 배치입니다. 현재 표준 결과물의 8프레임 시트는 4열 2행입니다.
+
 시트는 8 fps로 재생합니다. GIF는 120／130밀리초 프레임 지연을 번갈아 사용합니다. 실제 생성 동작은 예제와 다를 수 있습니다.
 
 라이선스는 프로젝트 루트의 [LICENSE](../LICENSE)를 참조하세요.

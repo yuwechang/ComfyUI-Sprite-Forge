@@ -10,6 +10,8 @@
 | [sample-character-run-spritesheet.png](sample-character-run-spritesheet.png) | 1024×128 的透明 PNG 图集，从左到右共 8 帧，每帧 128×128。 |
 | [sample-character-run-preview.gif](sample-character-run-preview.gif) | 128×128、8 帧的透明跑步预览，循环 1 秒。 |
 
+这是单行排版示例；目前标准交付的 8 帧图集为 4 列、2 行。
+
 图集以 8 fps 播放；GIF 使用交替的 120／130 毫秒帧延迟。实际生成的动作可能与示例不同。
 
 许可见项目根目录的 [LICENSE](../LICENSE)。
