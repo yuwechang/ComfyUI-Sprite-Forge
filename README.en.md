@@ -45,7 +45,7 @@ This skill requires FFmpeg and FFprobe to process video. Copy this sentence into
 
 Copy this message into your Codex:
 
-> Install comfyui-sprite-forge from https://github.com/yuwechang/ComfyUI-Sprite-Forge . Follow the repository's installation instructions to install all skills. My local ComfyUI can already run H3. Help configure my workflow and check compatibility. Ask for file locations if needed. Do not automatically download models or start generating video.
+> Install comfyui-sprite-forge from https://github.com/yuwechang/ComfyUI-Sprite-Forge . Follow the repository's installation instructions to install all skills. My local ComfyUI can already run H3. Help configure my workflow and check compatibility. Limit this task to installation, configuration, and checks, without downloading models or generating video.
 
 After installation, **open a new Codex chat** before using the skills.
 
@@ -67,7 +67,9 @@ You can also supply an existing video for conversion into transparent character 
 
 ## First use and delivery
 
-First use confirms final cell size and playback duration (defaults128×128 and1second), without asking for fps. Output starts at8fps and adapts within4-16; above16 requires separate approval, maximum24fps. Choose only source resolution by number:1 performance512×512,2 balanced768×768(default),3 quality1024×1024. Source runs at24fps; duration is automatically assessed at2-3 times final playback, capped at15seconds including cadence alignment. Same-chat tasks may reuse settings, but every generation displays the current final/source specification. Guidance follows your conversation language.
+On first use, you can choose the final cell size and playback duration; the defaults are **128×128 and 1 second**. Codex can assess fps for the motion, normally within **4–16 fps**. Rates above 16 fps require your approval, up to 24 fps.
+
+Source resolution options are **512×512 (performance), 768×768 (balanced, default), or 1024×1024 (quality)**. Source video uses a fixed 24 fps and a duration based on 2–3 times the final playback length; neither the requested nor the frame-aligned actual duration exceeds 15 seconds. Confirmed settings can be reused in the same chat. Before generation, you receive a summary of the final asset and source-video settings.
 
 The source targets 2–3 complete demonstrations for comparison. One complete acceptable candidate is sufficient; the final animation uses one candidate. Standard delivery ZIP contains only selected PNG frames, a transparent animation sheet, GIF preview and source video. Previews appear in chat; JSON/logs/reports remain in the linked working directory.
 

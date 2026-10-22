@@ -1,13 +1,13 @@
-# Codex 安装说明
+# 安装说明
 
 [繁體中文](INSTALL.md) | **简体中文** | [English](INSTALL.en.md) | [日本語](INSTALL.ja.md) | [한국어](INSTALL.ko.md)
 
 ## 安装前提
 
-- Python 3.10+、FFmpeg 和 FFprobe；检查是否可正常运行，缺少时协助安装。
-- 已能运行 H3 工作流的本机 ComfyUI，以及用户自己的 API 格式工作流 JSON；未提供时询问文件位置。
+- 可正常运行的 Python 3.10+、FFmpeg 和 FFprobe。
+- 需要生成视频时，请准备已能运行 H3 工作流的本机 ComfyUI，以及自己的 API 格式工作流 JSON。
 
-本项目不附工作流 API JSON。安装前先阅读 [AGENTS.md](AGENTS.md)。
+本项目不附工作流 API JSON。
 
 ## 1. 准备项目与 Python 环境
 
@@ -24,7 +24,7 @@ python -m venv .venv
 
 首次配置时，复制 `local-comfyui/config.example.json` 为 `local-comfyui/config.local.json`；已有配置则沿用并检查。
 
-依照 [docs/WORKFLOW.md](docs/WORKFLOW.zh-CN.md)，使用用户的 API JSON 设置服务地址、工作流路径、节点映射与帧数规则。工作流路径可为绝对路径，或相对于配置文件所在文件夹；需要调整工作流时另存副本。
+依照 [docs/WORKFLOW.md](docs/WORKFLOW.zh-CN.md)，使用你的 API JSON 设置服务地址、工作流路径、节点映射与帧数规则。工作流路径可为绝对路径，或相对于配置文件所在文件夹；需要调整工作流时另存副本。
 
 ## 3. 安装三个技能
 
@@ -57,13 +57,13 @@ $SkillsRoot = if ($env:CODEX_HOME) { Join-Path $env:CODEX_HOME 'skills' } else {
 .\.venv\Scripts\python.exe "$SkillsRoot/comfyui-forge-video2dsprite/scripts/comfyui_forge_video2dsprite.py" doctor
 ```
 
-如果用户提供了符合工作流尺寸限制的图片与提示词，再依照 [docs/WORKFLOW.md](docs/WORKFLOW.zh-CN.md) 从已安装位置运行 `--dry-run`，检查生成请求。
+如需检查生成请求，请准备符合工作流尺寸限制的图片与提示词，依照 [docs/WORKFLOW.md](docs/WORKFLOW.zh-CN.md) 从已安装位置运行 `--dry-run`。
 
-以上检查不生成视频；实际生成测试需由用户另外提出。
+以上检查不生成视频。如需测试实际生成效果，可在安装完成后提出动画需求。
 
-## 5. 报告结果
+## 5. 安装完成后
 
-报告项目、Python、技能与配置路径，以及各项检查结果和未完成项目。提醒用户开启新的 Codex 对话以加载技能。
+确认上述安装与连接检查均通过后，开启新的 Codex 对话以加载技能。接着可依照 [使用说明](docs/USAGE.zh-CN.md)，提供角色图片或已有视频开始制作。
 
 ## 更新与迁移
 
